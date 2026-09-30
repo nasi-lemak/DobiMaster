@@ -73,6 +73,8 @@ export const ALERT_KIND_LABEL: Record<string, string> = {
   uncollected: 'Uncollected laundry',
   stuck_cycle: 'Stuck cycle',
   short_cycle: 'Short cycle',
+  shop_offline: 'Shop offline (power / internet)',
+  weak_heating: 'Dryer heating weak',
 };
 
 export const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;

@@ -74,7 +74,7 @@ export const api = {
   get: <T>(path: string, opts?: { guest?: boolean }) => request<T>('GET', path, undefined, opts),
   post: <T>(path: string, body?: unknown, opts?: { guest?: boolean; headers?: Record<string, string> }) => request<T>('POST', path, body ?? {}, opts),
   patch: <T>(path: string, body: unknown) => request<T>('PATCH', path, body),
-  del: <T>(path: string) => request<T>('DELETE', path),
+  del: <T>(path: string, opts?: { guest?: boolean }) => request<T>('DELETE', path, undefined, opts),
 };
 
 export function uuid(): string {

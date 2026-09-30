@@ -18,7 +18,7 @@ export const test = base.extend<{ consoleErrors: string[] }>({
           // A socket torn down by navigation is expected; the app falls back to polling.
           if (/WebSocket connection to .* failed/.test(text)) return;
           // Expected failed requests (e.g. the wrong-password login) are asserted by the tests themselves.
-          if (/Failed to load resource: the server responded with a status of (401|409)/.test(text)) return;
+          if (/Failed to load resource: the server responded with a status of (400|401|409)/.test(text)) return;
           errors.push(`${page.url()} console.error: ${text}`);
         });
       };

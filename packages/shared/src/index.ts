@@ -129,6 +129,8 @@ export const ALERT_KINDS = [
   'uncollected',
   'stuck_cycle',
   'short_cycle',
+  'shop_offline',
+  'weak_heating',
 ] as const;
 export type AlertKind = (typeof ALERT_KINDS)[number];
 
@@ -174,6 +176,8 @@ export interface ShopSettings {
   finishedHoldMin: number;
   /** Minutes after finishing to send the uncollected reminder. */
   uncollectedReminderMin: number;
+  /** Electricity price in sen per kWh (all-in: energy + surcharges), for cost-per-cycle figures. */
+  electricitySenPerKwh: number;
 }
 
 export const DEFAULT_SHOP_SETTINGS: ShopSettings = {
@@ -181,6 +185,8 @@ export const DEFAULT_SHOP_SETTINGS: ShopSettings = {
   remindBeforeMin: 5,
   finishedHoldMin: 20,
   uncollectedReminderMin: 10,
+  // Roughly a Malaysian commercial tariff incl. surcharges; every shop should set its own.
+  electricitySenPerKwh: 50,
 };
 
 export function formatRM(sen: number): string {

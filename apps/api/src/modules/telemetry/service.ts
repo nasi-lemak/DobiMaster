@@ -77,6 +77,7 @@ export async function ingestSamples(ctx: Ctx, deviceId: string, samples: Sample[
   const { device, machine, events, wasOnline } = result;
   if (!wasOnline) {
     await resolveAlert(ctx, device.tenant_id, `device_offline:${device.id}`);
+    await resolveAlert(ctx, device.tenant_id, `shop_offline:${device.shop_id}`);
     await ctx.bus.publish(channels.tenant(device.tenant_id), 'device.status', { deviceId: device.id, online: true });
     if (machine) await recomputeMachineState(ctx, machine.id, 'device back online');
   }
@@ -93,6 +94,15 @@ async function applyDetectorEvent(ctx: Ctx, machine: Machine, evt: DetectorEvent
       return;
     case 'cycle_ended': {
       const cycle = await sensorCycleEnd(ctx, machine, new Date(evt.at));
+      if (cycle) {
+        const hours = (evt.at - evt.startedAt) / 3600_000;
+        await ctx.db
+          .updateTable('cycles')
+          .set({ avg_power_w: evt.avgPowerW, energy_wh: evt.avgPowerW * hours })
+          .where('id', '=', cycle.id)
+          .execute();
+        if (machine.type === 'dryer') await checkDryerHeating(ctx, machine, evt.avgPowerW, hours * 60);
+      }
       // "Paid for 40 minutes, it ran 26": flag cycles far shorter than the program the customer chose.
       if (cycle && (cycle.source === 'payment' || cycle.customer_id)) {
         const ranMin = (evt.at - evt.startedAt) / 60_000;
@@ -130,26 +140,81 @@ async function applyDetectorEvent(ctx: Ctx, machine: Machine, evt: DetectorEvent
 }
 
 /** Periodic: mark devices offline when their heartbeat is overdue. */
+/** Silent sensors in one shop at the same moment point at the shop (power cut / internet), not the machines. */
+export const SHOP_OUTAGE_MIN_DEVICES = 2;
+export const SHOP_OUTAGE_SHARE = 0.8;
+
 export async function sweepDevices(ctx: Ctx) {
   const now = ctx.now();
   const devices = await ctx.db.selectFrom('devices').selectAll().where('online', '=', true).execute();
-  for (const d of devices) {
-    const staleMs = 3 * d.heartbeat_sec * 1000;
-    if (d.last_seen_at && now.getTime() - d.last_seen_at.getTime() <= staleMs) continue;
-    await ctx.db.updateTable('devices').set({ online: false }).where('id', '=', d.id).execute();
-    const machine = await ctx.db.selectFrom('machines').selectAll().where('device_id', '=', d.id).where('deleted_at', 'is', null).executeTakeFirst();
-    await ctx.bus.publish(channels.tenant(d.tenant_id), 'device.status', { deviceId: d.id, online: false });
-    await raiseAlert(ctx, {
-      tenantId: d.tenant_id,
-      shopId: d.shop_id,
-      machineId: machine?.id ?? null,
-      kind: 'device_offline',
-      severity: 'medium',
-      message: `${machine ? machine.code : d.label || 'Sensor'} stopped reporting (last seen ${d.last_seen_at?.toISOString() ?? 'never'}) — power cut, tripped breaker or Wi-Fi down?`,
-      dedupeKey: `device_offline:${d.id}`,
-    });
-    if (machine) await recomputeMachineState(ctx, machine.id, 'device offline');
+  const stale = devices.filter((d) => !d.last_seen_at || now.getTime() - d.last_seen_at.getTime() > 3 * d.heartbeat_sec * 1000);
+  const byShop = new Map<string, typeof stale>();
+  for (const d of stale) byShop.set(d.shop_id, [...(byShop.get(d.shop_id) ?? []), d]);
+
+  for (const [shopId, silent] of byShop) {
+    const shopDevices = await ctx.db.selectFrom('devices').select('id').where('shop_id', '=', shopId).execute();
+    const outage = silent.length >= SHOP_OUTAGE_MIN_DEVICES && silent.length / shopDevices.length >= SHOP_OUTAGE_SHARE;
+    if (outage) {
+      const shop = await ctx.db.selectFrom('shops').select('name').where('id', '=', shopId).executeTakeFirstOrThrow();
+      const lastSeen = silent.map((d) => d.last_seen_at?.getTime() ?? 0).reduce((a, b) => Math.max(a, b), 0);
+      await raiseAlert(ctx, {
+        tenantId: silent[0]!.tenant_id,
+        shopId,
+        kind: 'shop_offline',
+        severity: 'high',
+        message: `${shop.name}: all ${silent.length} sensors went silent${lastSeen ? ` around ${new Date(lastSeen).toISOString()}` : ''} — likely a power cut or internet outage at the shop`,
+        dedupeKey: `shop_offline:${shopId}`,
+      });
+    }
+    for (const d of silent) {
+      await ctx.db.updateTable('devices').set({ online: false }).where('id', '=', d.id).execute();
+      const machine = await ctx.db.selectFrom('machines').selectAll().where('device_id', '=', d.id).where('deleted_at', 'is', null).executeTakeFirst();
+      await ctx.bus.publish(channels.tenant(d.tenant_id), 'device.status', { deviceId: d.id, online: false });
+      if (!outage) {
+        await raiseAlert(ctx, {
+          tenantId: d.tenant_id,
+          shopId: d.shop_id,
+          machineId: machine?.id ?? null,
+          kind: 'device_offline',
+          severity: 'medium',
+          message: `${machine ? machine.code : d.label || 'Sensor'} stopped reporting (last seen ${d.last_seen_at?.toISOString() ?? 'never'}) — tripped breaker, unplugged sensor or weak Wi-Fi?`,
+          dedupeKey: `device_offline:${d.id}`,
+        });
+      }
+      if (machine) await recomputeMachineState(ctx, machine.id, outage ? 'shop outage' : 'device offline');
+    }
   }
+}
+
+/**
+ * Electric dryers whose heater is failing still turn (motor current) but draw far less power, and
+ * customers get damp clothes. Compare each cycle with the machine's own recent median.
+ */
+export const WEAK_HEAT_RATIO = 0.6;
+export async function checkDryerHeating(ctx: Ctx, machine: Machine, avgPowerW: number, minutes: number) {
+  if (minutes < 10) return;
+  const recent = await ctx.db
+    .selectFrom('cycles')
+    .select('avg_power_w')
+    .where('machine_id', '=', machine.id)
+    .where('avg_power_w', 'is not', null)
+    .where('sensor_confirmed', '=', true)
+    .orderBy('started_at', 'desc')
+    .limit(21)
+    .execute();
+  const history = recent.slice(1).map((r) => r.avg_power_w!).sort((a, b) => a - b); // excludes this cycle
+  if (history.length < 8) return;
+  const median = history[Math.floor(history.length / 2)]!;
+  if (median <= 0 || avgPowerW >= median * WEAK_HEAT_RATIO) return;
+  await raiseAlert(ctx, {
+    tenantId: machine.tenant_id,
+    shopId: machine.shop_id,
+    machineId: machine.id,
+    kind: 'weak_heating',
+    severity: 'medium',
+    message: `${machine.code} drew ${Math.round((1 - avgPowerW / median) * 100)}% less power than usual — the heater may be failing (expect "not drying" complaints)`,
+    dedupeKey: `weak_heating:${machine.id}`,
+  });
 }
 
 export async function recordHeartbeat(ctx: Ctx, device: Device) {

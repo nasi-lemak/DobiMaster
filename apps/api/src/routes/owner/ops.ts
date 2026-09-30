@@ -12,7 +12,7 @@ import { logMaintenance, maintenanceDue } from '../../modules/maintenance/servic
 import { assignItemIds, todaysChecklists, toggleChecklistItem } from '../../modules/checklists/service.js';
 import { attachmentUrl } from '../../modules/attachments/service.js';
 import { reconciliation, recordCollection } from '../../modules/collections/service.js';
-import { capacityInsight, lowUsage, peakHours, revenue, utilisation, type RevenueGroup } from '../../modules/analytics/service.js';
+import { capacityInsight, energyCost, lowUsage, peakHours, revenue, utilisation, type RevenueGroup } from '../../modules/analytics/service.js';
 
 const uuid = z.string().uuid();
 /** Item ids are assigned by the server; send the existing id when editing so completions stay attached. */
@@ -415,6 +415,13 @@ export async function ownerOpsRoutes(app: FastifyInstance, ctx: Ctx) {
     await assertShopAccess(ctx, o, q.shopId);
     const { from, to } = range(q, ctx.now());
     return capacityInsight(ctx, o.tenantId, q.shopId, from, to);
+  });
+
+  app.get('/owner/analytics/energy', async (req) => {
+    const o = requirePerm(req, 'revenue.view');
+    const q = rangeQuery.parse(req.query);
+    const { from, to } = range(q, ctx.now());
+    return energyCost(ctx, o.tenantId, await scopeShops(ctx, o, q.shopId), from, to);
   });
 
   app.get('/owner/analytics/low-usage', async (req) => {

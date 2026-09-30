@@ -11,6 +11,21 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [forgot, setForgot] = useState<'off' | 'form' | 'sent'>('off');
+
+  const sendReset = async (e: FormEvent) => {
+    e.preventDefault();
+    setPending(true);
+    setError(null);
+    try {
+      await api.post('/owner/auth/forgot', { email: email.trim() });
+      setForgot('sent');
+    } catch (err) {
+      setError(err);
+    } finally {
+      setPending(false);
+    }
+  };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -36,6 +51,27 @@ export function LoginPage() {
             <p className="text-sm text-muted">Every branch, one screen.</p>
           </div>
         </div>
+        {forgot !== 'off' ? (
+          <form onSubmit={sendReset} className="space-y-4 rounded-2xl border border-line bg-surface p-5">
+            <h2 className="font-semibold">Reset your password</h2>
+            {forgot === 'sent' ? (
+              <p className="text-sm text-ink-2">If an account exists for {email.trim()}, we’ve emailed a reset link. It works once, for 30 minutes.</p>
+            ) : (
+              <>
+                <Field label="Email">
+                  <input className={inputClass} type="email" autoComplete="username" inputMode="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+                </Field>
+                <MutationError error={error} />
+                <Button type="submit" block disabled={pending}>
+                  {pending ? 'Sending…' : 'Email me a reset link'}
+                </Button>
+              </>
+            )}
+            <button type="button" className="text-sm text-brand" onClick={() => (setForgot('off'), setError(null))}>
+              ← Back to sign in
+            </button>
+          </form>
+        ) : (
         <form onSubmit={submit} className="space-y-4 rounded-2xl border border-line bg-surface p-5">
           <Field label="Email">
             <input className={inputClass} type="email" autoComplete="username" inputMode="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -47,7 +83,11 @@ export function LoginPage() {
           <Button type="submit" block size="lg" disabled={pending}>
             {pending ? 'Signing in…' : 'Sign in'}
           </Button>
+          <button type="button" className="block w-full text-center text-sm text-brand" onClick={() => (setForgot('form'), setError(null))}>
+            Forgot password?
+          </button>
         </form>
+        )}
         <div className="mt-4 rounded-2xl bg-surface-2 p-3 text-xs text-ink-2">
           <p className="font-medium">Demo accounts (password demo1234)</p>
           <ul className="mt-1 space-y-0.5">

@@ -1,6 +1,8 @@
 import { Link, useParams } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
-import { api, ApiError } from '../lib/api';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { api, ApiError, getGuestToken } from '../lib/api';
+import { enableCustomerPush } from '../lib/push';
 import { useI18n } from '../lib/i18n';
 import { rm } from '../lib/format';
 import { useChannels } from '../lib/realtime';
@@ -29,6 +31,7 @@ function classes(machines: PublicMachine[]) {
       kg: ms[0]!.capacityKg,
       total: ms.filter((m) => !['fault', 'maintenance', 'disabled'].includes(m.state)).length,
       free: ms.filter((m) => m.state === 'available').length,
+      live: ms.every((m) => m.observed),
       minPrice: Math.min(...prices),
       maxPrice: Math.max(...prices),
       nextFree: running.length ? Math.min(...running) : null,
@@ -90,7 +93,7 @@ export function ShopPage() {
         </div>
         <ul className="divide-y divide-line">
           {classes(s.machines).map((c) => (
-            <li key={c.key} className="flex items-center justify-between gap-3 py-2">
+            <li key={c.key} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2">
               <div>
                 <p className="text-sm font-medium">
                   {c.type === 'washer' ? t('washer') : t('dryer')} · {t('capacity', { kg: c.kg })}
@@ -101,6 +104,7 @@ export function ShopPage() {
                 <p className={cx('text-sm font-semibold tabular', c.free === 0 ? 'text-critical-ink' : 'text-good-ink')}>{t('freeOf', { free: c.free, total: c.total })}</p>
                 {c.free === 0 && c.nextFree && <p className="text-xs text-muted">{t('nextFreeIn', { min: Math.max(1, Math.ceil((c.nextFree - now) / 60_000)) })}</p>}
               </div>
+              {c.free === 0 && c.live && <WatchButton shopSlug={s.slug} type={c.type} kg={c.kg} />}
             </li>
           ))}
         </ul>
@@ -169,6 +173,66 @@ export function ShopPage() {
       <Link to={`/s/${s.slug}/report`} className="block text-center text-sm text-muted underline underline-offset-2">
         ⚠ {t('reportProblem')}
       </Link>
+    </div>
+  );
+}
+
+interface Watch {
+  id: string;
+  type: 'washer' | 'dryer';
+  capacityKg: number;
+  shopSlug: string;
+}
+
+/** Waiting list for a machine class — only offered where sensors can tell us when one frees up. */
+function WatchButton({ shopSlug, type, kg }: { shopSlug: string; type: 'washer' | 'dryer'; kg: number }) {
+  const { t, locale } = useI18n();
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const watches = useQuery({
+    queryKey: ['me', 'watches'],
+    queryFn: () => api.get<{ watches: Watch[] }>('/public/me/watches', { guest: true }),
+    enabled: !!getGuestToken(),
+  });
+  const mine = watches.data?.watches.find((w) => w.shopSlug === shopSlug && w.type === type && w.capacityKg === kg);
+
+  async function start() {
+    setBusy(true);
+    try {
+      await enableCustomerPush(locale).catch(() => false);
+      await api.post('/public/watches', { shopSlug, type, capacityKg: kg }, { guest: true });
+      await qc.invalidateQueries({ queryKey: ['me', 'watches'] });
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function cancel() {
+    if (!mine) return;
+    setBusy(true);
+    try {
+      await api.del(`/public/watches/${mine.id}`, { guest: true });
+    } catch {
+      /* already notified or expired */
+    }
+    await qc.invalidateQueries({ queryKey: ['me', 'watches'] });
+    setBusy(false);
+  }
+
+  return (
+    <div className="w-full text-right">
+      {mine ? (
+        <p className="text-xs text-info-ink">
+          🔔 {t('watch.active')} ·{' '}
+          <button type="button" className="underline" disabled={busy} onClick={cancel}>
+            {t('watch.cancel')}
+          </button>
+        </p>
+      ) : (
+        <button type="button" disabled={busy} onClick={start} className="rounded-lg bg-brand-soft px-2.5 py-1 text-xs font-medium text-info-ink">
+          🔔 {t('watch.button')}
+        </button>
+      )}
+      <p className="mt-0.5 text-[11px] text-muted">{t('watch.hint')}</p>
     </div>
   );
 }

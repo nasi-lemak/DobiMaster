@@ -1,7 +1,8 @@
+import { useState, type FormEvent } from 'react';
 import { api } from '../../lib/api';
-import { Card, EmptyState } from '../../components/ui';
+import { Button, Card, EmptyState, Field, inputClass } from '../../components/ui';
 import { ago, dateTime } from '../../lib/format';
-import { ConfirmButton, PageHeader, QueryState, Section, StatusTag } from '../components/common';
+import { ConfirmButton, MutationError, PageHeader, QueryState, Section, StatusTag } from '../components/common';
 import { useApi, useApiMutation } from '../lib/queries';
 import { useLogout } from '../lib/session';
 
@@ -25,7 +26,7 @@ export function SecurityPage() {
 
   return (
     <>
-      <PageHeader title="Signed-in devices" subtitle="Each sign-in lasts 14 days on that device. Logging out ends it for good — a copied link or cookie stops working too." />
+      <PageHeader title="Account &amp; devices" subtitle="Each sign-in lasts 14 days on that device. Logging out ends it for good — a copied link or cookie stops working too." />
       <QueryState q={q}>
         {() => {
           const sessions = q.data!.sessions;
@@ -87,10 +88,59 @@ export function SecurityPage() {
                 )}
               </Section>
               <p className="mt-3 text-xs text-muted">Lost your phone or signed in on a shared shop tablet? Use “Sign out other devices”. Removing a staff member from Staff ends their access immediately.</p>
+              <ChangePassword />
             </>
           );
         }}
       </QueryState>
     </>
+  );
+}
+
+function ChangePassword() {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [done, setDone] = useState<string | null>(null);
+  const change = useApiMutation(
+    () => api.post<{ otherSessionsSignedOut: number }>('/owner/me/password', { currentPassword: current, newPassword: next }),
+    [KEY],
+    (r) => {
+      setCurrent('');
+      setNext('');
+      setConfirm('');
+      setDone(r.otherSessionsSignedOut ? `Password changed. Signed out ${r.otherSessionsSignedOut} other device${r.otherSessionsSignedOut === 1 ? '' : 's'}.` : 'Password changed.');
+    },
+  );
+  const mismatch = confirm.length > 0 && next !== confirm;
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    setDone(null);
+    if (!mismatch) change.mutate(undefined);
+  };
+  return (
+    <Section title="Change password" className="mt-8">
+      <Card className="p-4">
+        <form onSubmit={submit} className="grid gap-3 sm:grid-cols-3">
+          <Field label="Current password">
+            <input className={inputClass} type="password" autoComplete="current-password" required value={current} onChange={(e) => setCurrent(e.target.value)} />
+          </Field>
+          <Field label="New password" hint="At least 8 characters">
+            <input className={inputClass} type="password" autoComplete="new-password" minLength={8} required value={next} onChange={(e) => setNext(e.target.value)} />
+          </Field>
+          <Field label="Confirm new password" error={mismatch ? 'The passwords don’t match' : null}>
+            <input className={inputClass} type="password" autoComplete="new-password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          </Field>
+          <div className="flex flex-wrap items-center gap-3 sm:col-span-3">
+            <Button type="submit" size="sm" disabled={change.isPending || mismatch || next.length < 8}>
+              {change.isPending ? 'Saving…' : 'Change password'}
+            </Button>
+            <span className="text-xs text-muted">Other devices are signed out; this one stays signed in.</span>
+            {done && <span className="text-sm text-good-ink">{done}</span>}
+          </div>
+        </form>
+        <MutationError error={change.error} />
+      </Card>
+    </Section>
   );
 }

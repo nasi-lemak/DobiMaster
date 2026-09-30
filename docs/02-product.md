@@ -61,6 +61,11 @@ Status sources referenced below:
 | **CSV/API import from existing QR-payment providers** | Revenue reconciliation without switching provider |
 | **Staff shift and task scheduling**, technician contacts | Assigning work across branches |
 | **Postgres row-level security** as defence-in-depth for tenancy | Security hardening |
+- Server-side sessions, the Account & devices page, and password change/reset.
+- "Notify me when free" (first-come, first-served; sensored classes only).
+- Electricity cost per cycle.
+- Shop-wide outage grouping.
+- A dryer heater check.
 
 ### Phase 3: control and monetisation (machine-specific, opt-in)
 

@@ -44,6 +44,7 @@ export interface UsersTable {
   name: string;
   password_hash: string;
   digest_opt_out: Generated<boolean>;
+  password_changed_at: TimestampNull;
   created_at: Timestamp;
 }
 
@@ -204,6 +205,8 @@ export interface CyclesTable {
   customer_id: string | null;
   payment_id: string | null;
   sensor_confirmed: Generated<boolean>;
+  energy_wh: number | null;
+  avg_power_w: number | null;
   created_at: Timestamp;
 }
 
@@ -473,6 +476,27 @@ export interface OwnerSessionsTable {
   revoked_at: TimestampNull;
 }
 
+export interface PasswordResetsTable {
+  token_hash: string;
+  user_id: string;
+  expires_at: TimestampReq;
+  used_at: TimestampNull;
+  created_at: Timestamp;
+}
+
+export interface MachineWatchesTable {
+  id: Generated<string>;
+  customer_id: string;
+  shop_id: string;
+  machine_type: MachineType;
+  capacity_kg: Numeric;
+  created_at: Timestamp;
+  expires_at: TimestampReq;
+  notified_at: TimestampNull;
+  notified_machine_id: string | null;
+  cancelled_at: TimestampNull;
+}
+
 export interface AppSettingsTable {
   key: string;
   value: Json<unknown>;
@@ -512,6 +536,8 @@ export interface Database {
   attachments: AttachmentsTable;
   digest_log: DigestLogTable;
   owner_sessions: OwnerSessionsTable;
+  password_resets: PasswordResetsTable;
+  machine_watches: MachineWatchesTable;
 }
 
 export type Shop = Selectable<ShopsTable>;

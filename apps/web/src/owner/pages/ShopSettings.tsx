@@ -58,6 +58,7 @@ function SettingsForm({ shop }: { shop: ShopRow }) {
   const [remind, setRemind] = useState(String(s.remindBeforeMin));
   const [hold, setHold] = useState(String(s.finishedHoldMin));
   const [uncollected, setUncollected] = useState(String(s.uncollectedReminderMin));
+  const [tariff, setTariff] = useState(((s.electricitySenPerKwh ?? 50) / 100).toFixed(3));
   const [published, setPublished] = useState(shop.is_published);
   const [saved, setSaved] = useState(false);
 
@@ -71,7 +72,7 @@ function SettingsForm({ shop }: { shop: ShopRow }) {
         openingHours: allDay ? Object.fromEntries(DAYS.map((d) => [d, { open: '00:00', close: '24:00' }])) : hours,
         facilities,
         policy: Object.fromEntries(Object.entries(policy).filter(([, v]) => v.trim()).map(([l, v]) => [l, v.trim()])),
-        settings: { faultReportThreshold: Number(threshold), remindBeforeMin: Number(remind), finishedHoldMin: Number(hold), uncollectedReminderMin: Number(uncollected) },
+        settings: { faultReportThreshold: Number(threshold), remindBeforeMin: Number(remind), finishedHoldMin: Number(hold), uncollectedReminderMin: Number(uncollected), electricitySenPerKwh: Math.round(Number(tariff) * 1000) / 10 },
         isPublished: published,
       }),
     [['owner', 'shop', shop.id], ['owner', 'overview'], k.me],
@@ -184,6 +185,9 @@ function SettingsForm({ shop }: { shop: ShopRow }) {
           </Field>
           <Field label="“Please collect” reminder after (min)" hint="1–120">
             <input className={inputClass} type="number" min={1} max={120} value={uncollected} onChange={(e) => setUncollected(e.target.value)} required />
+          </Field>
+          <Field label="Electricity price (RM per kWh)" hint="All-in, from your TNB bill (energy + surcharges). Used for the electricity cost per cycle on sensor-equipped machines.">
+            <input className={inputClass} type="number" min={0.01} max={5} step={0.001} value={tariff} onChange={(e) => setTariff(e.target.value)} required />
           </Field>
         </Card>
       </Section>

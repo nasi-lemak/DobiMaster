@@ -18,7 +18,7 @@ import { localParts } from '../lib/time.js';
 import { recomputeMachineState } from '../modules/machines/state.js';
 import { initialDetectorState } from '../modules/telemetry/detector.js';
 import { MemoryPushTransport } from '../modules/push/service.js';
-import { sweepDevices } from '../modules/telemetry/service.js';
+import { checkDryerHeating, sweepDevices } from '../modules/telemetry/service.js';
 import { sweepLowUsage } from '../modules/analytics/service.js';
 import { sweepMaintenance } from '../modules/maintenance/service.js';
 
@@ -154,6 +154,22 @@ const shops: ShopSpec[] = [
     ],
   },
 ];
+
+/**
+ * Plausible sensor readings: washers heat water electrically for warm/hot programs; electric dryers
+ * run a ~4.5 kW heater. SS2 D3's heater weakens over the last few hours (matches its "not drying" reports).
+ */
+function energyFor(ms: MachineSpec, programId: string, durMin: number, t: number) {
+  let watts: number;
+  if (ms.type === 'dryer') {
+    const weak = ms.code === 'D3' && ms.popularity === 0.5 && t > Date.now() - 6 * 3600_000;
+    watts = (weak ? 1900 : 4500) * (0.92 + rand() * 0.16);
+  } else {
+    const base = { cold: 350, warm: 1300, hot: 2100 }[programId] ?? 600;
+    watts = base * (ms.kg / 10) ** 0.6 * (0.9 + rand() * 0.2);
+  }
+  return { avg_power_w: Math.round(watts), energy_wh: Math.round((watts * durMin) / 60) };
+}
 
 /** Relative demand by local hour; weekends busier. */
 function demand(hour: number, isoDow: number) {
@@ -348,6 +364,7 @@ async function main() {
             customer_id: paidInApp ? null : customer,
             payment_id: paymentId,
             sensor_confirmed: !!ms.sensor,
+            ...(ms.sensor && ms.sensor !== 'shelly_offline' ? energyFor(ms, program.id, dur, t) : {}),
             created_at: at,
           });
         }
@@ -560,6 +577,12 @@ async function main() {
   await sweepDevices(ctx);
   await sweepLowUsage(ctx);
   await sweepMaintenance(ctx);
+  // Heater check on SS2 D3's latest cycle (normally runs live when the sensor reports a cycle end).
+  {
+    const d3 = await db.selectFrom('machines').selectAll().where('shop_id', '=', shopIds['dobi-ceria-ss2']!).where('code', '=', 'D3').executeTakeFirstOrThrow();
+    const last = await db.selectFrom('cycles').select('avg_power_w').where('machine_id', '=', d3.id).where('avg_power_w', 'is not', null).orderBy('started_at', 'desc').executeTakeFirst();
+    if (last?.avg_power_w) await checkDryerHeating(ctx, d3, last.avg_power_w, 30);
+  }
   // Repeat-fault alert for D3 (normally raised when the 3rd report arrives).
   await db
     .insertInto('alerts')

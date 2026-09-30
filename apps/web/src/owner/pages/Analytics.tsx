@@ -12,6 +12,7 @@ import { periodLabel, rmTick } from '../charts/scale';
 import { PageHeader, QueryState, Section, Segmented, ShopSelect, StatusTag } from '../components/common';
 import { CapacityPanel } from '../components/CapacityPanel';
 import { MachineRevenueTable } from '../components/MachineRevenueTable';
+import { EnergyPanel } from '../components/EnergyPanel';
 import { SOURCE_LABEL, WEEKDAYS, typeLabel } from '../lib/labels';
 import { k, qs, useApi } from '../lib/queries';
 import { useMe, useShortShopName } from '../lib/session';
@@ -112,6 +113,10 @@ export function AnalyticsPage() {
             </div>
           </EmptyState>
         )}
+      </Section>
+
+      <Section title="Electricity per cycle">
+        <EnergyPanel days={days} shopId={shopId} />
       </Section>
 
       <Section title="Revenue by machine">

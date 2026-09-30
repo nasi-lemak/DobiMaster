@@ -19,6 +19,7 @@ import {
 } from '../../auth/owner.js';
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors.js';
 import { audit } from '../../modules/audit/service.js';
+import { changePassword, requestPasswordReset, resetPassword } from '../../auth/passwords.js';
 import { ownerOverview } from '../../modules/overview/service.js';
 
 export async function ownerCoreRoutes(app: FastifyInstance, ctx: Ctx) {
@@ -33,6 +34,26 @@ export async function ownerCoreRoutes(app: FastifyInstance, ctx: Ctx) {
     // Revoke this device's session server-side, so a copied cookie stops working too.
     if (req.owner) await revokeSessions(ctx, req.owner.userId, { only: req.owner.sessionId });
     reply.clearCookie(SESSION_COOKIE, { path: '/' });
+    return { ok: true };
+  });
+
+  app.post('/owner/me/password', { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } } }, async (req) => {
+    const o = requireOwner(req);
+    const b = z.object({ currentPassword: z.string().min(1).max(200), newPassword: z.string().max(200) }).parse(req.body);
+    const signedOut = await changePassword(ctx, o, b.currentPassword, b.newPassword);
+    await audit(ctx, actorOf(req), 'user.password_change', 'user', o.userId, undefined, { otherSessionsSignedOut: signedOut });
+    return { ok: true, otherSessionsSignedOut: signedOut };
+  });
+
+  app.post('/owner/auth/forgot', { config: { rateLimit: { max: 5, timeWindow: '15 minutes' } } }, async (req) => {
+    const b = z.object({ email: z.string().email().max(200) }).parse(req.body);
+    await requestPasswordReset(ctx, b.email);
+    return { ok: true }; // same answer whether or not the account exists
+  });
+
+  app.post('/owner/auth/reset', { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } } }, async (req) => {
+    const b = z.object({ token: z.string().min(10).max(200), newPassword: z.string().max(200) }).parse(req.body);
+    await resetPassword(ctx, b.token, b.newPassword);
     return { ok: true };
   });
 

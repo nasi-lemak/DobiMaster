@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Navigate, Route, Routes } from 'react-router';
+import { Navigate, Route, Routes, useLocation } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '../lib/api';
 import { ErrorBox, PageLoader } from '../components/ui';
@@ -30,6 +30,7 @@ import { StaffPage } from './pages/Staff';
 import { AuditPage } from './pages/Audit';
 import { DigestPage } from './pages/Digest';
 import { SecurityPage } from './pages/Security';
+import { ResetPasswordPage } from './pages/ResetPassword';
 import { Guard } from './components/Guard';
 
 /** GET /owner/me; a 401 resolves to null (= signed out) instead of an error. */
@@ -51,10 +52,13 @@ function useSession() {
 
 export function OwnerApp() {
   const session = useSession();
+  const { pathname } = useLocation();
   useEffect(() => {
     document.title = 'DobiMaster · Owner';
   }, []);
 
+  // The emailed reset link works whether or not someone is signed in on this browser.
+  if (pathname === '/owner/reset') return <ResetPasswordPage />;
   if (session.isPending) return <PageLoader />;
   if (session.isError)
     return (

@@ -44,6 +44,7 @@ const shopSchema = z.object({
       remindBeforeMin: z.number().int().min(1).max(30),
       finishedHoldMin: z.number().int().min(5).max(120),
       uncollectedReminderMin: z.number().int().min(1).max(120),
+      electricitySenPerKwh: z.number().min(1).max(500),
     })
     .partial()
     .default({}),

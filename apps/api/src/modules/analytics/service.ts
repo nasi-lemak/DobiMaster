@@ -502,3 +502,62 @@ export async function sweepLowUsage(ctx: Ctx) {
   }
 }
 
+
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Electricity cost per cycle from sensor-measured energy × the shop's tariff. Only machines with a
+ * power sensor have data. Water, gas (for gas dryers) and detergent are not included — the UI says so.
+ */
+export async function energyCost(ctx: Ctx, tenantId: string, shopIds: string[], from: Date, to: Date) {
+  if (!shopIds.length) return { machines: [], note: '' };
+  const shops = await ctx.db.selectFrom('shops').select(['id', 'name', 'settings']).where('tenant_id', '=', tenantId).where('id', 'in', shopIds).execute();
+  const tariff = new Map(shops.map((s) => [s.id, Number((s.settings as { electricitySenPerKwh?: number })?.electricitySenPerKwh ?? 50)]));
+  const rows = await ctx.db
+    .selectFrom('cycles as c')
+    .innerJoin('machines as m', 'm.id', 'c.machine_id')
+    .select((eb) => [
+      'c.machine_id',
+      'c.shop_id',
+      'm.code',
+      'm.type',
+      'm.capacity_kg',
+      eb.fn.countAll<string>().as('cycles'),
+      eb.fn.avg<string>('c.energy_wh').as('avg_wh'),
+      eb.fn.avg<string>('c.price_sen').as('avg_price'),
+      eb.fn.avg<string>('c.avg_power_w').as('avg_w'),
+    ])
+    .where('c.shop_id', 'in', shopIds)
+    .where('c.energy_wh', 'is not', null)
+    .where('c.started_at', '>=', from)
+    .where('c.started_at', '<', to)
+    .groupBy(['c.machine_id', 'c.shop_id', 'm.code', 'm.type', 'm.capacity_kg'])
+    .execute();
+  const shopName = new Map(shops.map((s) => [s.id, s.name]));
+  const machines = rows
+    .map((r) => {
+      const kwh = Number(r.avg_wh) / 1000;
+      const costSen = kwh * (tariff.get(r.shop_id) ?? 50);
+      const price = Number(r.avg_price ?? 0);
+      return {
+        machineId: r.machine_id,
+        shopId: r.shop_id,
+        shopName: shopName.get(r.shop_id) ?? '',
+        code: r.code,
+        type: r.type,
+        capacityKg: Number(r.capacity_kg),
+        cycles: Number(r.cycles),
+        avgKwhPerCycle: Math.round(kwh * 100) / 100,
+        avgPowerW: Math.round(Number(r.avg_w ?? 0)),
+        energyCostPerCycleSen: Math.round(costSen),
+        avgPriceSen: Math.round(price),
+        energyShareOfPrice: price > 0 ? costSen / price : null,
+        tariffSenPerKwh: tariff.get(r.shop_id) ?? 50,
+      };
+    })
+    .sort((a, b) => (b.energyShareOfPrice ?? 0) - (a.energyShareOfPrice ?? 0));
+  return {
+    machines,
+    note: 'Electricity only, from sensor-measured energy × your tariff (set it in Shop settings). Water, gas and detergent are not included.',
+  };
+}

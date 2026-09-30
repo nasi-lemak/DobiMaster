@@ -21,6 +21,7 @@ import { WhatsAppService, createWhatsAppTransport, type WhatsAppTransport } from
 import { createMailTransport, type MailTransport } from './modules/mail/service.js';
 import { LocalBlobStore, type BlobStore } from './modules/attachments/storage.js';
 import { whatsappRoutes } from './routes/whatsapp.js';
+import { registerWatchHandlers } from './modules/watches/service.js';
 import { attachmentRoutes } from './routes/attachments.js';
 import { ownerDigestRoutes } from './routes/owner/digest.js';
 import { createGateway, type PaymentGateway } from './modules/payments/gateway.js';
@@ -75,6 +76,7 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
     vapidPublicKey: vapid.publicKey,
   };
   registerJobs(ctx, { periodic: opts.runJobs ?? false });
+  registerWatchHandlers(ctx);
 
   await app.register(cookie);
   await app.register(rateLimit, { max: 600, timeWindow: '1 minute', global: true, enableDraftSpec: true });

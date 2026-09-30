@@ -27,9 +27,9 @@ const templates: Templates = {
     zh: (v) => ({ title: `${v.machine} 未能启动`, body: `机器未能启动，${v.amount} 将自动退款。` }),
   },
   machine_available: {
-    en: (v) => ({ title: `A ${v.type} is free`, body: `${v.machine} at ${v.shop} is now available.` }),
-    ms: (v) => ({ title: `${v.type} kosong`, body: `${v.machine} di ${v.shop} kini tersedia.` }),
-    zh: (v) => ({ title: `有空闲${v.type}`, body: `${v.shop} 的 ${v.machine} 现在可用。` }),
+    en: (v) => ({ title: `A ${v.type} is free`, body: `${v.machine} at ${v.shop} just became free. It isn't reserved — first come, first served.` }),
+    ms: (v) => ({ title: `${v.type} kosong`, body: `${v.machine} di ${v.shop} baru kosong. Tiada tempahan — siapa cepat dia dapat.` }),
+    zh: (v) => ({ title: `有空闲${v.type}`, body: `${v.shop} 的 ${v.machine} 刚空出来。不设预留，先到先得。` }),
   },
 };
 

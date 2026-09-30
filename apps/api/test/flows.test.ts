@@ -93,6 +93,7 @@ describe('sensor-observed machine', () => {
 
   it('goes offline when the sensor stops reporting and recovers on the next reading', async () => {
     await h.tick(5); // > 3 × 60 s heartbeat
+    await telemetry(f.paid.token, [{ ts: h.clock.now.getTime(), powerW: 1 }]); // the shop's other sensor is fine: not an outage
     await h.ctx.jobs.runDue();
     const { sweepDevices } = await import('../src/modules/telemetry/service.js');
     await sweepDevices(h.ctx);

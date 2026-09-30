@@ -10,6 +10,7 @@ import { listShops, machineByQr, shopDetail } from '../modules/public/service.js
 import { createCustomerReport } from '../modules/tickets/service.js';
 import { createPayment, handleGatewayWebhook, serializePayment } from '../modules/payments/service.js';
 import { MockGateway } from '../modules/payments/gateway.js';
+import { activeWatches, cancelWatch, createWatch } from '../modules/watches/service.js';
 
 const uuid = z.string().uuid();
 
@@ -131,6 +132,29 @@ export async function publicRoutes(app: FastifyInstance, ctx: Ctx) {
         resolvedAt: r.resolved_at?.toISOString() ?? null,
       })),
     };
+  });
+
+  // ---- "notify me when free" (sensored machine classes only) ----
+  app.post('/public/watches', { config: { rateLimit: { max: 20, timeWindow: '10 minutes' } } }, async (req) => {
+    const customerId = await customerFromRequest(ctx, req, true);
+    const b = z.object({ shopSlug: z.string().max(80), type: z.enum(['washer', 'dryer']), capacityKg: z.number().min(1).max(100) }).parse(req.body);
+    const w = await createWatch(ctx, { customerId, ...b });
+    return { watch: { id: w.id, expiresAt: w.expires_at.toISOString() } };
+  });
+
+  app.get('/public/me/watches', async (req) => {
+    const customerId = await customerFromRequest(ctx, req, true);
+    const rows = await activeWatches(ctx, customerId);
+    return {
+      watches: rows.map((w) => ({ id: w.id, type: w.machine_type, capacityKg: Number(w.capacity_kg), shopSlug: w.shop_slug, shopName: w.shop_name, expiresAt: w.expires_at.toISOString() })),
+    };
+  });
+
+  app.delete('/public/watches/:id', async (req) => {
+    const customerId = await customerFromRequest(ctx, req, true);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    await cancelWatch(ctx, customerId, id);
+    return { ok: true };
   });
 
   // ---- push ----

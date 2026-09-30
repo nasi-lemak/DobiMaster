@@ -36,7 +36,9 @@ For owners:
 | **Notifications** | Web push, plus **WhatsApp "notify me"**. The customer taps a button that opens WhatsApp with a one-time code pre-filled and presses send. That links their number and opens WhatsApp's free 24-hour reply window, so laundry alerts cost nothing and work on iPhones without installing the web app. The inbound webhook is signature-verified. STOP/START is supported. Nothing is sent outside the window except approved templates. |
 | **Weekly owner summary** | Every Monday at 08:00 local time: last week's cycles, revenue (owners and managers only), utilisation, out-of-service hours, reports, checklists and a ranked "needs you" list, by email (and WhatsApp if linked). It's also browsable by week at `/owner/digest`, with opt-out and "send me now". |
 | **Photos** | Customers can add up to 3 photos to a report. Checklist items can require a photo as proof of cleaning. Photos are resized and re-encoded on the phone, which strips EXIF/GPS. The server accepts JPEG/PNG/WebP by magic bytes only. Photos are served only to owners with access to that shop. |
-| **Owner sessions** | One server-side session per signed-in device. Logout ends it for real, so a copied cookie stops working. *Signed-in devices* (`/owner/security`) lists them, with "sign out other devices" for a lost phone or shared shop tablet. Removing a staff member ends their access immediately. |
+| **Owner accounts** | One server-side session per signed-in device. Logout ends it for real. *Account & devices* (`/owner/security`) lists devices, signs out others, and changes your password (which also signs out other devices). *Forgot password?* emails a single-use 30-minute link, without revealing whether an account exists. Removing a staff member ends their access immediately. |
+| **"Notify me when free"** | At shops where the machine class is fully sensored, a customer can wait for, say, a 15 kg washer. Each machine that frees up notifies exactly one waiting customer, in order, so a single free machine doesn't send five people rushing over. Nothing is reserved. |
+| **Sensor analytics** | Energy is measured per cycle. *Electricity per cycle* in Analytics multiplies it by the shop's tariff (Shop settings) to give cost and share of price per machine. The demo data shows dryers at about 24% vs washers at about 5%. A whole shop's sensors going silent together raises one "power / internet outage" alert instead of one per machine. A dryer drawing far less power than its own usual raises "heater may be failing". |
 | **Privacy (PDPA)** | Daily retention sweep. Refund phone numbers are removed 90 days after a case closes, report photos after 180 days, and inactive WhatsApp numbers after 180 days. The WhatsApp message log is kept for 30 days. |
 
 ## Run it locally
@@ -88,7 +90,7 @@ The integration tests cover:
 - RBAC and tenant isolation
 - cash reconciliation
 
-Browser end-to-end tests (Playwright, 23 tests) run on an isolated stack: database `dobimaster_e2e` (created with `createdb -O dobi dobimaster_e2e`), API on :3100 and web on :5180. The database is reseeded on every run.
+Browser end-to-end tests (Playwright, 24 tests) run on an isolated stack: database `dobimaster_e2e` (created with `createdb -O dobi dobimaster_e2e`), API on :3100 and web on :5180. The database is reseeded on every run.
 
 ```bash
 pnpm --filter @dobi/web test:e2e
