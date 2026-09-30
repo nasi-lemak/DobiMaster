@@ -29,6 +29,7 @@ import { ShopSettingsPage } from './pages/ShopSettings';
 import { StaffPage } from './pages/Staff';
 import { AuditPage } from './pages/Audit';
 import { DigestPage } from './pages/Digest';
+import { SecurityPage } from './pages/Security';
 import { Guard } from './components/Guard';
 
 /** GET /owner/me; a 401 resolves to null (= signed out) instead of an error. */
@@ -104,6 +105,7 @@ export function OwnerApp() {
           <Route path="checklists" element={<ChecklistsPage />} />
           <Route path="more" element={<MorePage />} />
           <Route path="digest" element={<DigestPage />} />
+          <Route path="security" element={<SecurityPage />} />
           <Route path="alerts" element={<AlertsPage />} />
           <Route path="announcements" element={<AnnouncementsPage />} />
           <Route path="devices" element={<DevicesPage />} />

@@ -26,6 +26,10 @@ export function registerJobs(ctx: Ctx, opts: { periodic: boolean }) {
   ctx.jobs.register('sweep.cleanup', async () => {
     const cutoff = new Date(ctx.now().getTime() - 14 * 86_400_000);
     await ctx.db.deleteFrom('jobs').where('status', 'in', ['done', 'cancelled']).where('updated_at', '<', cutoff).execute();
+    await ctx.db
+      .deleteFrom('owner_sessions')
+      .where((eb) => eb.or([eb('expires_at', '<', cutoff), eb('revoked_at', '<', cutoff)]))
+      .execute();
   });
 
   // Simulator plumbing (demo devices): emit power readings and keep simulated sensors "online".

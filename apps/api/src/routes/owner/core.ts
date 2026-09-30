@@ -12,25 +12,68 @@ import {
   can,
   hashPassword,
   login,
+  revokeSessions,
   requireOwner,
   requirePerm,
   setSessionCookie,
 } from '../../auth/owner.js';
-import { badRequest, conflict, notFound } from '../../lib/errors.js';
+import { badRequest, conflict, forbidden, notFound } from '../../lib/errors.js';
 import { audit } from '../../modules/audit/service.js';
 import { ownerOverview } from '../../modules/overview/service.js';
 
 export async function ownerCoreRoutes(app: FastifyInstance, ctx: Ctx) {
   app.post('/owner/auth/login', { config: { rateLimit: { max: 10, timeWindow: '5 minutes' } } }, async (req, reply) => {
     const body = z.object({ email: z.string().email(), password: z.string().min(1).max(200) }).parse(req.body);
-    const { token } = await login(ctx, body.email, body.password);
+    const { token } = await login(ctx, body.email, body.password, { userAgent: req.headers['user-agent'], ip: req.ip });
     setSessionCookie(reply, token, config.isProd);
     return { ok: true };
   });
 
-  app.post('/owner/auth/logout', async (_req, reply) => {
+  app.post('/owner/auth/logout', async (req, reply) => {
+    // Revoke this device's session server-side, so a copied cookie stops working too.
+    if (req.owner) await revokeSessions(ctx, req.owner.userId, { only: req.owner.sessionId });
     reply.clearCookie(SESSION_COOKIE, { path: '/' });
     return { ok: true };
+  });
+
+  /** Devices I'm signed in on. */
+  app.get('/owner/sessions', async (req) => {
+    const o = requireOwner(req);
+    const rows = await ctx.db
+      .selectFrom('owner_sessions')
+      .select(['id', 'user_agent', 'ip', 'created_at', 'last_seen_at'])
+      .where('user_id', '=', o.userId)
+      .where('revoked_at', 'is', null)
+      .where('expires_at', '>', ctx.now())
+      .orderBy('last_seen_at', 'desc')
+      .execute();
+    return {
+      sessions: rows.map((r) => ({
+        id: r.id,
+        device: describeDevice(r.user_agent),
+        ip: r.ip,
+        createdAt: r.created_at.toISOString(),
+        lastSeenAt: r.last_seen_at.toISOString(),
+        current: r.id === o.sessionId,
+      })),
+    };
+  });
+
+  app.post('/owner/sessions/:id/revoke', async (req) => {
+    const o = requireOwner(req);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const n = await revokeSessions(ctx, o.userId, { only: id });
+    if (!n) throw notFound('Session');
+    await audit(ctx, actorOf(req), 'session.revoke', 'session', id);
+    return { ok: true };
+  });
+
+  /** Lost phone / shared shop tablet: keep this device, sign out everywhere else. */
+  app.post('/owner/sessions/revoke-others', async (req) => {
+    const o = requireOwner(req);
+    const revoked = await revokeSessions(ctx, o.userId, { except: o.sessionId });
+    await audit(ctx, actorOf(req), 'session.revoke_others', 'user', o.userId, undefined, { revoked });
+    return { revoked };
   });
 
   app.get('/owner/me', async (req) => {
@@ -147,6 +190,26 @@ export async function ownerCoreRoutes(app: FastifyInstance, ctx: Ctx) {
     return { ok: true, userId: user.id };
   });
 
+  /** Remove someone from the team: their membership goes and their sessions for this business end now. */
+  app.delete('/owner/staff/:userId', async (req) => {
+    const o = requirePerm(req, 'staff.manage');
+    const { userId } = z.object({ userId: z.string().uuid() }).parse(req.params);
+    if (userId === o.userId) throw badRequest('You can’t remove yourself');
+    const m = await ctx.db.selectFrom('memberships').selectAll().where('tenant_id', '=', o.tenantId).where('user_id', '=', userId).executeTakeFirst();
+    if (!m) throw notFound('Team member');
+    if (m.role === 'owner' && o.role !== 'owner') throw forbidden('Only owners can remove owners');
+    if (m.role === 'owner') {
+      const owners = await ctx.db.selectFrom('memberships').select('id').where('tenant_id', '=', o.tenantId).where('role', '=', 'owner').execute();
+      if (owners.length <= 1) throw badRequest('A business needs at least one owner');
+    }
+    await ctx.db.transaction().execute(async (trx) => {
+      await trx.deleteFrom('memberships').where('id', '=', m.id).execute();
+      await trx.updateTable('owner_sessions').set({ revoked_at: ctx.now() }).where('user_id', '=', userId).where('tenant_id', '=', o.tenantId).where('revoked_at', 'is', null).execute();
+    });
+    await audit(ctx, actorOf(req), 'staff.remove', 'user', userId, { role: m.role, shopIds: m.shop_ids });
+    return { ok: true };
+  });
+
   // ---- audit log ----
   app.get('/owner/audit', async (req) => {
     const o = requirePerm(req, 'audit.view');
@@ -156,4 +219,12 @@ export async function ownerCoreRoutes(app: FastifyInstance, ctx: Ctx) {
     if (q.entityId) query = query.where('entity_id', '=', q.entityId);
     return { entries: await query.execute() };
   });
+}
+
+/** "Chrome on Android" style label from a user-agent string — enough to recognise your own devices. */
+function describeDevice(ua: string | null): string {
+  if (!ua) return 'Unknown device';
+  const browser = /Edg\//.test(ua) ? 'Edge' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+  const os = /iPhone|iPad/.test(ua) ? 'iPhone/iPad' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : 'unknown OS';
+  return `${browser} on ${os}`;
 }

@@ -36,6 +36,7 @@ export const SECONDARY_NAV: NavItem[] = [
   { to: '/owner/settings', label: 'Shop settings', icon: 'store', perm: 'shops.manage', hint: 'Hours, facilities, policy' },
   { to: '/owner/staff', label: 'Staff', icon: 'users', perm: 'staff.manage', hint: 'Team and branch access' },
   { to: '/owner/audit', label: 'Audit log', icon: 'log', perm: 'audit.view', hint: 'Who changed what' },
+  { to: '/owner/security', label: 'Signed-in devices', icon: 'phone', hint: 'Sign out a lost phone or shared tablet' },
 ];
 
 export function useNavAllowed() {

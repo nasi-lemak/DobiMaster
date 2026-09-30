@@ -161,11 +161,14 @@ export async function guest(h: Harness, withPush = true) {
   return { token, customerId, auth: { authorization: `Bearer ${token}` }, endpoint: `https://push.example/${customerId}` };
 }
 
+/**
+ * A real server-side session via the login service (same code path as the route), minus the HTTP
+ * endpoint's rate limit, which would otherwise trip when a test file signs in many times.
+ */
 export async function loginAs(h: Harness, email: string) {
-  const res = await h.app.inject({ method: 'POST', url: '/api/v1/owner/auth/login', payload: { email, password: 'password123' } });
-  const cookie = res.cookies.find((c) => c.name === 'dm_session');
-  if (!cookie) throw new Error(`login failed: ${res.body}`);
-  return { cookie: `dm_session=${cookie.value}` };
+  const { login } = await import('../src/auth/owner.js');
+  const { token } = await login(h.ctx, email, 'password123', { userAgent: 'vitest' });
+  return { cookie: `dm_session=${token}` };
 }
 
 export async function machineState(h: Harness, id: string) {

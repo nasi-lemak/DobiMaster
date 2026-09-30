@@ -275,6 +275,54 @@ describe('owner permissions & tenancy', () => {
     expect(mixed.statusCode).toBe(400);
   });
 
+  it('logout ends only that device’s session, server-side; "sign out other devices" ends the rest', async () => {
+    const me = (headers: Record<string, string>) => h.app.inject({ method: 'GET', url: '/api/v1/owner/me', headers });
+    const phone = await loginAs(h, f.users.owner);
+    const laptop = await loginAs(h, f.users.owner);
+    const tablet = await loginAs(h, f.users.owner);
+
+    const list = (await h.app.inject({ method: 'GET', url: '/api/v1/owner/sessions', headers: laptop })).json().sessions;
+    expect(list).toHaveLength(3);
+    expect(list.filter((s: { current: boolean }) => s.current)).toHaveLength(1);
+
+    // Logging out on the phone kills that cookie even if someone copied it…
+    await h.app.inject({ method: 'POST', url: '/api/v1/owner/auth/logout', headers: phone });
+    expect((await me(phone)).statusCode).toBe(401);
+    // …but the other devices stay signed in.
+    expect((await me(laptop)).statusCode).toBe(200);
+    expect((await me(tablet)).statusCode).toBe(200);
+
+    const r = await h.app.inject({ method: 'POST', url: '/api/v1/owner/sessions/revoke-others', headers: laptop });
+    expect(r.json().revoked).toBe(1);
+    expect((await me(tablet)).statusCode).toBe(401);
+    expect((await me(laptop)).statusCode).toBe(200);
+
+    // Nobody can revoke someone else's session.
+    const staff = await loginAs(h, f.users.staff);
+    const laptopSession = (await h.app.inject({ method: 'GET', url: '/api/v1/owner/sessions', headers: laptop })).json().sessions[0].id;
+    expect((await h.app.inject({ method: 'POST', url: `/api/v1/owner/sessions/${laptopSession}/revoke`, headers: staff })).statusCode).toBe(404);
+    expect((await me(laptop)).statusCode).toBe(200);
+  });
+
+  it('removing a staff member ends their access immediately, even with a valid cookie', async () => {
+    const owner = await loginAs(h, f.users.owner);
+    const staff = await loginAs(h, f.users.staff);
+    expect((await h.app.inject({ method: 'GET', url: '/api/v1/owner/me', headers: staff })).statusCode).toBe(200);
+    expect((await h.app.inject({ method: 'DELETE', url: `/api/v1/owner/staff/${f.users.ownerId}`, headers: owner })).statusCode).toBe(400); // not yourself
+    expect((await h.app.inject({ method: 'DELETE', url: `/api/v1/owner/staff/${f.users.ownerId}`, headers: staff })).statusCode).toBe(403);
+    expect((await h.app.inject({ method: 'DELETE', url: `/api/v1/owner/staff/${f.users.staffId}`, headers: owner })).statusCode).toBe(200);
+    expect((await h.app.inject({ method: 'GET', url: '/api/v1/owner/me', headers: staff })).statusCode).toBe(401);
+    const sessions = await h.ctx.db.selectFrom('owner_sessions').select('revoked_at').where('user_id', '=', f.users.staffId).execute();
+    expect(sessions.every((x) => x.revoked_at)).toBe(true);
+  });
+
+  it('rejects validly signed tokens that have no live session behind them', async () => {
+    const { signToken } = await import('../src/auth/tokens.js');
+    const legacy = await signToken({ sub: f.users.ownerId, tid: f.tenantId }, '14d'); // pre-sessions token shape
+    const res = await h.app.inject({ method: 'GET', url: '/api/v1/owner/me', headers: { cookie: `dm_session=${legacy}` } });
+    expect(res.statusCode).toBe(401);
+  });
+
   it('one tenant cannot touch another tenant’s machines', async () => {
     const other = await seedFixture(h);
     const owner = await loginAs(h, other.users.owner);

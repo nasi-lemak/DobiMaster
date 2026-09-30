@@ -461,6 +461,18 @@ export interface DigestLogTable {
   recipients: Generated<number>;
 }
 
+export interface OwnerSessionsTable {
+  id: Generated<string>;
+  user_id: string;
+  tenant_id: string;
+  user_agent: string | null;
+  ip: string | null;
+  created_at: Timestamp;
+  last_seen_at: Timestamp;
+  expires_at: TimestampReq;
+  revoked_at: TimestampNull;
+}
+
 export interface AppSettingsTable {
   key: string;
   value: Json<unknown>;
@@ -499,6 +511,7 @@ export interface Database {
   wa_messages: WaMessagesTable;
   attachments: AttachmentsTable;
   digest_log: DigestLogTable;
+  owner_sessions: OwnerSessionsTable;
 }
 
 export type Shop = Selectable<ShopsTable>;

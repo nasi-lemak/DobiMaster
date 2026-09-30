@@ -32,7 +32,10 @@ test('phone layout: tabs, More menu, a form above the tab bar, a bottom-sheet di
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toBeHidden();
 
+  // Log out is reachable from More on a phone. (Not clicked: logout now revokes the session
+  // server-side, and this spec shares the owner session with every other spec. Real logout is
+  // covered by auth.spec.ts and security.spec.ts with their own sessions.)
   await tabs.getByRole('link', { name: /^More/ }).click();
-  await page.getByRole('button', { name: 'Log out' }).click();
-  await expect(page.getByRole('heading', { name: 'DobiMaster for owners' })).toBeVisible();
+  await page.getByRole('button', { name: 'Log out' }).scrollIntoViewIfNeeded();
+  await expect(page.getByRole('button', { name: 'Log out' })).toBeInViewport();
 });

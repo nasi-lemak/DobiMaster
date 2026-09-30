@@ -86,5 +86,12 @@ test('add a staff member, who can then sign in with their own (limited) access',
   await expect(navLink(p2, 'Tickets')).toBeVisible();
   await expect(navLink(p2, 'Analytics')).toHaveCount(0);
   await expect(navLink(p2, 'Staff')).toHaveCount(0);
+
+  // Removing them ends their access straight away — even in the session they already have open.
+  await row.getByRole('button', { name: 'Remove' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove' }).click();
+  await expect(page.getByRole('listitem').filter({ hasText: person.email })).toHaveCount(0);
+  await p2.reload();
+  await expect(p2.getByLabel('Password')).toBeVisible();
   await ctx.close();
 });

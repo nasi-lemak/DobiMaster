@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ROLE_PERMISSIONS, ROLES, type Role } from '@dobi/shared';
 import { api } from '../../lib/api';
 import { Button, Card, EmptyState, Field, inputClass } from '../../components/ui';
-import { MutationError, PageHeader, QueryState, StatusTag } from '../components/common';
+import { ConfirmButton, MutationError, PageHeader, QueryState, StatusTag } from '../components/common';
 import { Icon } from '../components/icons';
 import { k, useApi, useApiMutation } from '../lib/queries';
 import { useMe, useShopName } from '../lib/session';
@@ -16,6 +16,8 @@ const ROLE_HINT: Record<Role, string> = {
 
 export function StaffPage() {
   const shopName = useShopName();
+  const me = useMe();
+  const remove = useApiMutation((userId: string) => api.del(`/owner/staff/${userId}`), [k.staff]);
   const [adding, setAdding] = useState(false);
   const q = useApi<{ staff: StaffRow[] }>(k.staff, '/owner/staff');
   return (
@@ -50,6 +52,18 @@ export function StaffPage() {
                     </StatusTag>
                     <div className="mt-0.5 text-xs text-muted">{s.shop_ids ? s.shop_ids.map(shopName).join(', ') : 'All branches'}</div>
                   </div>
+                  {s.id !== me.user.id && (s.role !== 'owner' || me.role === 'owner') && (
+                    <ConfirmButton
+                      title={`Remove ${s.name}?`}
+                      message="They lose access straight away and are signed out on every device. Their past actions stay in the audit log."
+                      confirmLabel="Remove"
+                      onConfirm={() => remove.mutateAsync(s.id)}
+                      pending={remove.isPending}
+                      error={remove.error}
+                    >
+                      Remove
+                    </ConfirmButton>
+                  )}
                 </div>
               ))}
             </Card>
