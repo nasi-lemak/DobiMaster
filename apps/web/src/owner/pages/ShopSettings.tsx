@@ -74,7 +74,7 @@ function SettingsForm({ shop }: { shop: ShopRow }) {
         settings: { faultReportThreshold: Number(threshold), remindBeforeMin: Number(remind), finishedHoldMin: Number(hold), uncollectedReminderMin: Number(uncollected) },
         isPublished: published,
       }),
-    [['owner', 'shop', shop.id], ['owner', 'overview']],
+    [['owner', 'shop', shop.id], ['owner', 'overview'], k.me],
     () => setSaved(true),
   );
 

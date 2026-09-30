@@ -1,12 +1,13 @@
 import type { RefundMethod } from '@dobi/shared';
 import type { Ctx } from '../../context.js';
+import { json } from '../../db/index.js';
 import { channels } from '../../events/bus.js';
 import { badRequest, conflict, notFound } from '../../lib/errors.js';
 import { raiseAlert } from '../alerts/service.js';
 
 export async function requestRefund(
   ctx: Ctx,
-  input: { tenantId: string; ticketId?: string | null; paymentId?: string | null; amountSen: number; method: RefundMethod; payoutPhone?: string | null; note?: string | null },
+  input: { tenantId: string; ticketId?: string | null; paymentId?: string | null; amountSen: number; method: RefundMethod; payoutPhone?: string | null; note?: string | null; actorId?: string },
 ) {
   let shopId: string | null = null;
   if (input.ticketId) {
@@ -40,9 +41,19 @@ export async function requestRefund(
     })
     .returningAll()
     .executeTakeFirstOrThrow();
+  if (r.ticket_id) {
+    await ctx.db
+      .insertInto('ticket_events')
+      .values({ ticket_id: r.ticket_id, actor_id: input.actorId ?? null, kind: 'refund', body: `Refund of ${sen(r.amount_sen)} requested (${METHOD_LABEL[r.method]})`, data: json({ refundId: r.id, action: 'requested' }), created_at: ctx.now() })
+      .execute();
+  }
   await ctx.bus.publish(channels.tenant(input.tenantId), 'refund.updated', { id: r.id, status: r.status });
   return r;
 }
+
+const METHOD_LABEL: Record<RefundMethod, string> = { original: 'back to original payment', duitnow: 'DuitNow transfer', cash: 'cash', other: 'other' };
+const ACTION_TEXT = { approve: 'approved', reject: 'rejected', mark_paid: 'marked as paid' } as const;
+const sen = (v: number) => `RM ${(v / 100).toFixed(2)}`;
 
 /**
  * Owner decision. Approving an "original"-method refund pays it through the gateway (durable job);
@@ -81,7 +92,14 @@ export async function decideRefund(
   if (r.ticket_id) {
     await ctx.db
       .insertInto('ticket_events')
-      .values({ ticket_id: r.ticket_id, actor_id: userId, kind: 'refund', body: `Refund ${decision.action.replace('_', ' ')}`, created_at: now })
+      .values({
+        ticket_id: r.ticket_id,
+        actor_id: userId,
+        kind: 'refund',
+        body: `Refund of ${sen(r.amount_sen)} ${ACTION_TEXT[decision.action]}${decision.action === 'mark_paid' && decision.reference ? ` (ref ${decision.reference.trim()})` : ''}`,
+        data: json({ refundId: r.id, action: decision.action }),
+        created_at: now,
+      })
       .execute();
   }
   const updated = await ctx.db.selectFrom('refunds').selectAll().where('id', '=', refundId).executeTakeFirstOrThrow();

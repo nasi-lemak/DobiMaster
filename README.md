@@ -87,6 +87,12 @@ The integration tests cover:
 - RBAC and tenant isolation
 - cash reconciliation
 
+Browser end-to-end tests (Playwright, 22 tests) run on an isolated stack: database `dobimaster_e2e` (created with `createdb -O dobi dobimaster_e2e`), API on :3100 and web on :5180. The database is reseeded on every run.
+
+```bash
+pnpm --filter @dobi/web test:e2e
+```
+
 ### Deploy
 
 `docker compose up --build` runs Postgres and one container that serves both the API and the built PWA on :3000. For production:

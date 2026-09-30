@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { navTo, openOwner, OWNER_STATE, SHOPS, uniq } from './helpers';
 
 test.use({ storageState: OWNER_STATE });
@@ -11,18 +12,24 @@ test('bulk-add machines, edit one price, remove the other', async ({ page }) => 
 
   await openOwner(page);
   await navTo(page, 'Machines');
-  await page.getByRole('combobox', { name: 'Shop' }).selectOption({ label: SHOPS.kepong.name });
+  const pagePicker = page.getByRole('combobox', { name: 'Shop' });
+  await pagePicker.selectOption({ label: SHOPS.damansara.name });
   await expect(page).toHaveURL(/[?&]shop=/);
 
   await page.getByRole('button', { name: 'Add machines' }).click();
   const form = page.getByRole('region', { name: 'Add machines' });
-  await expect(form.getByRole('combobox', { name: 'Shop' })).toHaveValue(new URL(page.url()).searchParams.get('shop')!);
+  const formPicker = form.getByRole('combobox', { name: 'Shop' });
+  await expect(formPicker).toHaveValue(await pagePicker.first().inputValue()); // defaults to the shop being viewed
+  // …but machines can be added to another shop from the form.
+  await formPicker.selectOption({ label: SHOPS.kepong.name });
   await form.getByLabel('Machine codes').fill(`${a.toLowerCase()}, ${b}`);
   await expect(form.getByText('2 machines will be added')).toBeVisible();
   await form.getByLabel('Capacity (kg)').fill('12');
   await form.getByRole('button', { name: 'Add 2 machines' }).click();
 
   await expect(page.getByRole('status')).toContainText(`Added ${a}, ${b}`);
+  // The list switches to the shop they were added to.
+  await expect(page.getByRole('combobox', { name: 'Shop' }).locator('option:checked')).toHaveText(SHOPS.kepong.name);
   await expect(machineRow(page, a)).toContainText('Washer 12 kg');
   await expect(machineRow(page, a)).toContainText('RM 5.00–RM 7.00');
   await expect(machineRow(page, b)).toBeVisible();

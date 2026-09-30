@@ -1,4 +1,5 @@
 import { useNavigate, useParams } from 'react-router';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api';
 import { Card } from '../../components/ui';
 import { ConfirmButton, PageHeader, QueryState } from '../components/common';
@@ -11,10 +12,16 @@ export function MachineEditPage() {
   const navigate = useNavigate();
   const q = useApi<MachineDetail>(k.machine(id), `/owner/machines/${id}`);
   const save = useApiMutation((b: MachinePayload) => api.patch(`/owner/machines/${id}`, b), [['owner']], () => navigate(`/owner/machines/${id}`));
-  // Return to the list of the machine's own shop (the list otherwise defaults to the first shop, hiding the result).
-  const del = useApiMutation(() => api.del(`/owner/machines/${id}`), [['owner']], () =>
-    navigate(q.data ? `/owner/machines?shop=${q.data.machine.shopId}` : '/owner/machines'),
-  );
+  const qc = useQueryClient();
+  const del = useMutation({
+    mutationFn: () => api.del(`/owner/machines/${id}`),
+    onSuccess: async () => {
+      // Return to the list of the machine's own shop (the list otherwise opens on the first shop, hiding the result).
+      navigate(q.data ? `/owner/machines?shop=${q.data.machine.shopId}` : '/owner/machines');
+      // Refresh everything except the deleted machine itself: refetching it would only 404.
+      await qc.invalidateQueries({ queryKey: ['owner'], predicate: (x) => !(x.queryKey[1] === 'machine' && x.queryKey[2] === id) });
+    },
+  });
 
   return (
     <QueryState q={q}>

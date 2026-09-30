@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { createMachine, createTicket, navTo, openOwner, OWNER_STATE, SHOPS, shopBySlug, uniq } from './helpers';
 
 test.use({ storageState: OWNER_STATE });
@@ -10,15 +10,24 @@ test('create a staff ticket from the Tickets page', async ({ page }) => {
 
   await openOwner(page);
   await navTo(page, 'Tickets');
+  // Filter the list to the shop first: a new ticket then defaults to that shop.
+  await page.getByRole('combobox', { name: 'Shop' }).selectOption({ label: shop.name });
   await page.getByRole('button', { name: 'New ticket' }).click();
 
   const dialog = page.getByRole('dialog', { name: 'New ticket' });
-  await dialog.getByRole('combobox', { name: 'Shop' }).selectOption({ label: shop.name });
+  await expect(dialog.getByRole('combobox', { name: 'Shop' })).toHaveValue(shop.id);
+  // Typing, cancelling and reopening starts from a blank form.
+  await dialog.getByLabel('Title (optional)').fill('draft that gets cancelled');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+  await page.getByRole('button', { name: 'New ticket' }).click();
+  await expect(dialog.getByLabel('Title (optional)')).toHaveValue('');
+
   await dialog.getByLabel('Machine (optional)').selectOption({ label: `${machine.code} · washer 10 kg` });
-  await dialog.getByLabel('Category').selectOption({ label: 'Water leak' });
+  await dialog.getByLabel(/^Category/).selectOption({ label: 'Water leak' });
   await dialog.getByLabel('Title (optional)').fill(title);
   await dialog.getByLabel('Details (optional)').fill('Found a puddle under the machine during the morning round.');
-  await dialog.getByLabel('Priority').selectOption({ label: 'High' });
+  await dialog.getByLabel(/^Priority/).selectOption({ label: 'High' });
   await dialog.getByRole('button', { name: 'Create ticket' }).click();
 
   // Lands on the new ticket.

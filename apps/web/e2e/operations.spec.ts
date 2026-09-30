@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { createMachine, navTo, openOwner, OWNER_STATE, SHOPS, shopBySlug, uniq } from './helpers';
 
 test.use({ storageState: OWNER_STATE });
@@ -14,6 +14,8 @@ test('record a cash collection for a shop and find it in the history', async ({ 
   const form = page.getByRole('region', { name: 'Record collection' });
   await form.getByRole('combobox', { name: 'Shop' }).selectOption({ label: shop.name });
   await form.getByLabel('Note (optional)').fill(note);
+  const when = form.getByLabel('Collected at');
+  await expect(when).not.toHaveValue(''); // defaults to now
 
   const cash = form.getByLabel(`${machine.code} cash in RM`);
   await cash.fill('12,30');
@@ -22,6 +24,11 @@ test('record a cash collection for a shop and find it in the history', async ({ 
   await cash.fill('12.30');
   await form.getByLabel(`${machine.code} cycle counter reading`).fill('4455');
   await expect(form).toContainText('1 machine · RM 12.30');
+  // A cleared date can't be saved (it used to throw "Invalid time value").
+  const now = await when.inputValue();
+  await when.fill('');
+  await expect(form.getByRole('button', { name: 'Save collection' })).toBeDisabled();
+  await when.fill(now);
   await form.getByRole('button', { name: 'Save collection' }).click();
 
   await expect(page.getByRole('status')).toContainText('Collection saved.');
@@ -30,7 +37,7 @@ test('record a cash collection for a shop and find it in the history', async ({ 
   const history = page.getByRole('region', { name: 'History' });
   const entry = history.getByRole('button').filter({ hasText: note });
   await expect(entry).toContainText(shop.name);
-  await expect(entry).toContainText('1 machines');
+  await expect(entry).toContainText('1 machine ·');
   await expect(entry).toContainText('RM 12.30');
   await entry.click();
   await expect(entry).toHaveAttribute('aria-expanded', 'true');
@@ -86,6 +93,28 @@ test('maintenance: create a plan, log a due item as done, pause the plan', async
   await expect(item).toHaveCount(0);
 });
 
+test('maintenance plan form: switching shop drops a machine picked in the previous shop', async ({ page }) => {
+  const title = `E2E clean soap drawer ${uniq()}`;
+  await openOwner(page, '/owner/maintenance');
+  const plans = page.getByRole('region', { name: 'Plans' });
+  await plans.getByRole('button', { name: 'New plan' }).click();
+  const form = page.getByRole('region', { name: 'New maintenance plan' });
+  await form.getByRole('combobox', { name: 'Shop' }).selectOption({ label: SHOPS.ss2.name });
+  await form.getByLabel('Applies to').selectOption({ label: 'Only W1 (washer 10 kg)' });
+  await form.getByRole('combobox', { name: 'Shop' }).selectOption({ label: SHOPS.kepong.name });
+  // The select can't show SS2's W1 any more, so it displays "All washers" — and that must be what is saved.
+  await expect(form.getByLabel('Applies to')).toHaveValue('type:washer');
+  await form.getByLabel('What needs doing').fill(title);
+  await form.getByLabel('Cycles').fill('100000');
+  await form.getByRole('button', { name: 'Create plan' }).click();
+  await expect(form).toBeHidden();
+
+  const plan = plans.getByRole('listitem').filter({ hasText: title });
+  await expect(plan).toContainText(`${SHOPS.kepong.name} · all washers · every 100000 cycles`);
+  await plan.getByRole('button', { name: 'Pause' }).click();
+  await expect(plan.getByText('Paused')).toBeVisible();
+});
+
 test('announcement in three languages shows on the public shop page until it is ended', async ({ page }) => {
   const id = uniq();
   const msg = { en: `E2E dryer D2 under repair until Friday ${id}`, ms: `E2E pengering D2 dibaiki hingga Jumaat ${id}`, zh: `E2E 烘干机 D2 维修至周五 ${id}` };
@@ -99,6 +128,9 @@ test('announcement in three languages shows on the public shop page until it is 
   await form.getByLabel('English (required)').fill(msg.en);
   await form.getByLabel('Bahasa Melayu').fill(msg.ms);
   await form.getByLabel('中文').fill(msg.zh);
+  // "Show until" can't be set before today (local date, not UTC).
+  const today = await page.evaluate(() => new Date().toLocaleDateString('en-CA'));
+  await expect(form.getByLabel('Show until (optional)')).toHaveAttribute('min', today);
   await form.getByRole('button', { name: 'Publish' }).click();
   await expect(form).toBeHidden();
 

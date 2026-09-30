@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { createMachine, navTo, openOwner, OWNER_STATE, SHOPS, shopBySlug, uniq } from './helpers';
 
 test.use({ storageState: OWNER_STATE, permissions: ['clipboard-read', 'clipboard-write'] });
@@ -23,6 +23,10 @@ test('register a sensor for a machine, copy the one-time token, ingest a sample 
   const dialog = page.getByRole('dialog', { name: 'Sensor registered' });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText('It is shown only once')).toBeVisible();
+  // A stray Escape or tap outside must not lose the one-time token.
+  await page.keyboard.press('Escape');
+  await page.mouse.click(5, 5);
+  await expect(dialog).toBeVisible();
   const tokenInput = dialog.getByLabel('Device token');
   const token = await tokenInput.inputValue();
   expect(token.length).toBeGreaterThan(16);

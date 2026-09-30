@@ -241,6 +241,40 @@ describe('owner permissions & tenancy', () => {
     expect(audit.map((a) => a.action)).toContain('machine.admin_state');
   });
 
+  it('a manager limited to one branch cannot act on another branch', async () => {
+    const { hashPassword } = await import('../src/auth/owner.js');
+    const { raiseAlert } = await import('../src/modules/alerts/service.js');
+    const u = await h.ctx.db
+      .insertInto('users')
+      .values({ email: `mgr-${randomUUID().slice(0, 6)}@test.my`, name: 'Branch manager', password_hash: await hashPassword('password123') })
+      .returning(['id', 'email'])
+      .executeTakeFirstOrThrow();
+    await h.ctx.db.insertInto('memberships').values({ tenant_id: f.tenantId, user_id: u.id, role: 'manager', shop_ids: [f.otherShopId] }).execute();
+    const mgr = await loginAs(h, u.email);
+
+    // Refund against a ticket in the other shop: refused, and nothing is created.
+    const g = await guest(h, false);
+    const t = (await h.app.inject({ method: 'POST', url: '/api/v1/public/reports', headers: g.auth, payload: { id: randomUUID(), qrToken: f.washer.qr, category: 'coin_jammed' } })).json().ticket;
+    const refund = await h.app.inject({ method: 'POST', url: '/api/v1/owner/refunds', headers: mgr, payload: { ticketId: t.id, amountSen: 500, method: 'cash' } });
+    expect(refund.statusCode).toBe(403);
+    expect(await h.ctx.db.selectFrom('refunds').select('id').where('ticket_id', '=', t.id).execute()).toHaveLength(0);
+
+    // Alerts, maintenance plans and checklist templates of the other shop.
+    await raiseAlert(h.ctx, { tenantId: f.tenantId, shopId: f.shopId, kind: 'low_usage', message: 'x', dedupeKey: `t:${randomUUID()}` });
+    const alert = await h.ctx.db.selectFrom('alerts').select('id').where('shop_id', '=', f.shopId).executeTakeFirstOrThrow();
+    expect((await h.app.inject({ method: 'POST', url: `/api/v1/owner/alerts/${alert.id}/ack`, headers: mgr, payload: {} })).statusCode).toBe(403);
+
+    const owner = await loginAs(h, f.users.owner);
+    const plan = (await h.app.inject({ method: 'POST', url: '/api/v1/owner/maintenance/plans', headers: owner, payload: { shopId: f.shopId, machineType: 'washer', title: 'Descale', intervalDays: 30 } })).json().plan;
+    expect((await h.app.inject({ method: 'PATCH', url: `/api/v1/owner/maintenance/plans/${plan.id}`, headers: mgr, payload: { active: false } })).statusCode).toBe(403);
+    const tpl = (await h.app.inject({ method: 'POST', url: '/api/v1/owner/checklists/templates', headers: owner, payload: { shopId: f.shopId, name: 'Open', items: [{ label: 'Mop' }] } })).json().template;
+    expect((await h.app.inject({ method: 'PATCH', url: `/api/v1/owner/checklists/templates/${tpl.id}`, headers: mgr, payload: { active: false } })).statusCode).toBe(403);
+
+    // A plan can't attach one shop's machine to another shop.
+    const mixed = await h.app.inject({ method: 'POST', url: '/api/v1/owner/maintenance/plans', headers: owner, payload: { shopId: f.otherShopId, machineId: f.washer.id, title: 'Belt', intervalDays: 30 } });
+    expect(mixed.statusCode).toBe(400);
+  });
+
   it('one tenant cannot touch another tenant’s machines', async () => {
     const other = await seedFixture(h);
     const owner = await loginAs(h, other.users.owner);

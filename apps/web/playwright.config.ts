@@ -1,4 +1,9 @@
+import { existsSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
+
+// Pre-installed Chromium in the dev container; elsewhere (CI) fall back to Playwright's own download.
+const LOCAL_CHROMIUM = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const chromium = process.env.PW_CHROMIUM || (existsSync(LOCAL_CHROMIUM) ? LOCAL_CHROMIUM : undefined);
 
 /**
  * End-to-end tests against an ISOLATED stack so the dev servers (:3000 / :5173) and the
@@ -34,9 +39,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     // The dev service worker caches the shell; tests always want the live Vite build.
     serviceWorkers: 'block',
-    launchOptions: {
-      executablePath: process.env.PW_CHROMIUM ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-    },
+    launchOptions: chromium ? { executablePath: chromium } : {},
   },
   projects: [
     { name: 'setup', testMatch: /auth\.setup\.ts/ },
@@ -60,13 +63,14 @@ export default defineConfig({
       stderr: 'pipe',
     },
     {
-      command: `npx vite --port ${WEB_PORT} --strictPort`,
+      command: `npx vite --port ${WEB_PORT} --strictPort --logLevel error`,
       url: WEB_URL,
       env: { API_URL },
       reuseExistingServer: false,
       timeout: 120_000,
       stdout: 'ignore',
-      stderr: 'pipe',
+      // Vite logs a harmless "ws proxy error: ECONNRESET" whenever a test closes a page with a live socket.
+      stderr: process.env.E2E_VITE_LOGS ? 'pipe' : 'ignore',
     },
   ],
 });

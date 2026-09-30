@@ -65,6 +65,22 @@ export async function createMachine(request: APIRequestContext, shopId: string, 
   return r.machines[0]!;
 }
 
+/** Arrange step: a new (published, 24h) shop owned by the demo tenant. */
+export async function createShop(request: APIRequestContext, name: string): Promise<MeShop> {
+  const day = { open: '00:00', close: '24:00' };
+  const r = await ok<{ shop: MeShop }>(
+    await request.post('/api/v1/owner/shops', {
+      data: {
+        name,
+        slug: `e2e-${uniq().toLowerCase()}`,
+        address: '1, Jalan Ujian, Petaling Jaya',
+        openingHours: { '1': day, '2': day, '3': day, '4': day, '5': day, '6': day, '7': day },
+      },
+    }),
+  );
+  return r.shop;
+}
+
 export async function createTicket(request: APIRequestContext, shopId: string, title: string, extra: Record<string, unknown> = {}) {
   const r = await ok<{ ticket: { id: string; ref: string } }>(
     await request.post('/api/v1/owner/tickets', { data: { id: crypto.randomUUID(), shopId, category: 'other', title, ...extra } }),

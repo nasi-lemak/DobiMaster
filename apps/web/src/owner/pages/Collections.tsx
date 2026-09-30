@@ -69,6 +69,7 @@ function RecordForm({ defaultShopId, onDone, onCancel }: { defaultShopId: string
   const entered = Object.entries(lines).filter(([, l]) => l.amount.trim() !== '');
   const invalid = entered.some(([, l]) => parseRm(l.amount) == null || (l.counter.trim() !== '' && !/^\d+$/.test(l.counter.trim())));
   const total = entered.reduce((s, [, l]) => s + (parseRm(l.amount) ?? 0), 0);
+  const atValid = !!at && !Number.isNaN(new Date(at).getTime());
 
   const save = useApiMutation(
     () =>
@@ -93,8 +94,8 @@ function RecordForm({ defaultShopId, onDone, onCancel }: { defaultShopId: string
           <span className="mb-1 block text-sm font-medium">Shop</span>
           <ShopSelect value={shopId} onChange={(id) => (setShopId(id), setLines({}))} allowAll={false} />
         </div>
-        <Field label="Collected at">
-          <input className={inputClass} type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} max={localNow()} />
+        <Field label="Collected at" error={atValid ? null : 'Enter the date and time of the collection'}>
+          <input className={inputClass} type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} max={localNow()} required aria-invalid={!atValid} />
         </Field>
         <Field label="Note (optional)">
           <input className={inputClass} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="e.g. Weekly coin collection" />
@@ -155,7 +156,7 @@ function RecordForm({ defaultShopId, onDone, onCancel }: { defaultShopId: string
             Cancel
           </Button>
         )}
-        <Button disabled={save.isPending || !entered.length || invalid || !shopId} onClick={() => save.mutate(undefined)}>
+        <Button disabled={save.isPending || !entered.length || invalid || !shopId || !atValid} onClick={() => save.mutate(undefined)}>
           {save.isPending ? 'Saving…' : 'Save collection'}
         </Button>
       </div>
@@ -265,7 +266,8 @@ function History({ shopId }: { shopId: string }) {
                         {dateTime(c.collected_at)} · {c.shop_name}
                       </div>
                       <div className="text-xs text-muted">
-                        {c.lines.length} machines{c.collected_by_name && ` · by ${c.collected_by_name}`}
+                        {c.lines.length} machine{c.lines.length === 1 ? '' : 's'}
+                        {c.collected_by_name && ` · by ${c.collected_by_name}`}
                         {c.note && ` · ${c.note}`}
                       </div>
                     </div>

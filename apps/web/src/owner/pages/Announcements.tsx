@@ -8,6 +8,12 @@ import { k, useApi, useApiMutation } from '../lib/queries';
 import { useCan, useMe, useShopName } from '../lib/session';
 import type { Announcement } from '../lib/types';
 
+/** YYYY-MM-DD in the browser's time zone (what a date input shows). */
+function localToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 const isLive = (a: Announcement, now = Date.now()) => new Date(a.starts_at).getTime() <= now && (!a.ends_at || new Date(a.ends_at).getTime() > now);
 
 export function AnnouncementsPage() {
@@ -149,7 +155,7 @@ function NewAnnouncement({ onDone }: { onDone: () => void }) {
         <textarea className={inputClass} rows={2} value={zh} onChange={(e) => setZh(e.target.value)} maxLength={2000} />
       </Field>
       <Field label="Show until (optional)" hint="Ends at the end of that day. Leave empty to end it manually.">
-        <input className={inputClass} type="date" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} min={new Date().toISOString().slice(0, 10)} />
+        <input className={inputClass} type="date" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} min={localToday()} />
       </Field>
       <MutationError error={create.error} />
       <div className="flex justify-end gap-2">

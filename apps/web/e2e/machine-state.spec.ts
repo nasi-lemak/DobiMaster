@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { createMachine, openOwner, OWNER_STATE, SHOPS, shopBySlug, uniq } from './helpers';
 
 test.use({ storageState: OWNER_STATE });
@@ -46,6 +46,20 @@ test('branch live view: mark maintenance with a reason → customer sees it → 
   await expect(customer.getByRole('alert')).toHaveCount(0);
   await expect(customer.getByRole('button', { name: /I’ve started it/ })).toBeVisible();
   await customer.close();
+
+  // Staff-reported fault (reason optional) and clearing it.
+  await page.getByRole('button', { name: `Actions for ${machine.code}` }).click();
+  await sheet.getByRole('button', { name: 'Mark faulty…' }).click();
+  await sheet.getByLabel('What is wrong? (optional)').fill('Door lock broken');
+  await sheet.getByRole('button', { name: 'Mark faulty', exact: true }).click();
+  await expect(sheet).toBeHidden();
+  await expect(tile).toContainText('Fault');
+  await expect(tile).toContainText('Door lock broken');
+  await page.getByRole('button', { name: `Actions for ${machine.code}` }).click();
+  await sheet.getByRole('button', { name: 'Clear fault' }).click();
+  await expect(sheet).toBeHidden();
+  await expect(tile).toContainText('Available');
+  await expect(tile).not.toContainText('Door lock broken');
 
   // The machine's history records both changes with the reason.
   await tile.click();

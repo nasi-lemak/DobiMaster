@@ -8,6 +8,7 @@ import {
   SESSION_COOKIE,
   accessibleShopIds,
   actorOf,
+  assertShopAccess,
   can,
   hashPassword,
   login,
@@ -78,6 +79,9 @@ export async function ownerCoreRoutes(app: FastifyInstance, ctx: Ctx) {
     const o = requireOwner(req);
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const { resolve } = z.object({ resolve: z.boolean().default(false) }).parse(req.body ?? {});
+    const alert = await ctx.db.selectFrom('alerts').select('shop_id').where('id', '=', id).where('tenant_id', '=', o.tenantId).executeTakeFirst();
+    if (!alert) throw notFound('Alert');
+    if (alert.shop_id) await assertShopAccess(ctx, o, alert.shop_id);
     const r = await ctx.db
       .updateTable('alerts')
       .set(resolve ? { status: 'resolved', resolved_at: ctx.now() } : { status: 'acknowledged' })

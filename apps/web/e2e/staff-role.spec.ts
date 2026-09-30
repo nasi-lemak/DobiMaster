@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { navLink, openOwner, SHOPS, STAFF_STATE } from './helpers';
 
 test.use({ storageState: STAFF_STATE });

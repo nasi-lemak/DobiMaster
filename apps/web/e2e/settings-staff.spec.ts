@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test';
-import { navLink, navTo, openOwner, OWNER_STATE, SHOPS, uniq } from './helpers';
+import { expect, test } from './fixtures';
+import { createShop, navLink, navTo, openOwner, OWNER_STATE, SHOPS, uniq } from './helpers';
 
 test.use({ storageState: OWNER_STATE });
 
@@ -33,6 +33,22 @@ test('save shop settings (policy text, reminder, facility) and they persist afte
   // Customers see the new policy on the shop page.
   await page.goto(`/s/${SHOPS.kepong.slug}`);
   await expect(page.getByText(policy)).toBeVisible();
+});
+
+test('renaming a shop updates the shop pickers straight away', async ({ page }) => {
+  const shop = await createShop(page.request, `E2E Dobi ${uniq()}`);
+  const renamed = `${shop.name} Baru`;
+
+  await openOwner(page, `/owner/settings?shop=${shop.id}`);
+  const picker = page.getByRole('combobox', { name: 'Shop' });
+  await expect(picker.locator('option:checked')).toHaveText(shop.name);
+  await page.getByLabel('Name', { exact: true }).fill(renamed);
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
+  // No reload: the picker (fed by /owner/me) shows the new name.
+  await expect(picker.locator('option:checked')).toHaveText(renamed);
+  await navTo(page, 'Machines');
+  await expect(page.getByRole('combobox', { name: 'Shop' }).getByRole('option', { name: renamed })).toHaveCount(1);
 });
 
 test('add a staff member, who can then sign in with their own (limited) access', async ({ page, browser }) => {

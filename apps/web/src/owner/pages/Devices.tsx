@@ -167,6 +167,8 @@ function TokenModal({ r, onClose }: { r: Registered; onClose: () => void }) {
       onClose={onClose}
       title="Sensor registered"
       wide
+      // The token can't be recovered: a stray tap outside or Escape must not throw it away.
+      dismissible={false}
       footer={
         <Button onClick={onClose}>
           <Icon name="check" className="h-4 w-4" /> I've saved the token

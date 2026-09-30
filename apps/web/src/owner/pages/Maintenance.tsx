@@ -158,7 +158,15 @@ function PlanForm({ onDone, defaultShopId }: { onDone: () => void; defaultShopId
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <span className="mb-1 block text-sm font-medium">Shop</span>
-          <ShopSelect value={shopId} onChange={setShopId} allowAll={false} />
+          <ShopSelect
+            value={shopId}
+            onChange={(id) => {
+              setShopId(id);
+              // "Only W1" referred to a machine in the previous shop: fall back to its machine type there.
+              if (scope.startsWith('machine:')) setScope(`type:${machines.data?.machines.find((m) => `machine:${m.id}` === scope)?.type ?? 'dryer'}`);
+            }}
+            allowAll={false}
+          />
         </div>
         <Field label="Applies to">
           <select className={inputClass} value={scope} onChange={(e) => setScope(e.target.value)}>

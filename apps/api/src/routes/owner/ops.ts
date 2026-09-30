@@ -4,7 +4,7 @@ import { MACHINE_TYPES, REFUND_METHODS, TICKET_CATEGORIES, TICKET_SEVERITIES, TI
 import type { Ctx } from '../../context.js';
 import { json } from '../../db/index.js';
 import { accessibleShopIds, actorOf, assertShopAccess, can, requireOwner, requirePerm, scopeShops } from '../../auth/owner.js';
-import { notFound } from '../../lib/errors.js';
+import { badRequest, notFound } from '../../lib/errors.js';
 import { audit } from '../../modules/audit/service.js';
 import { createStaffTicket, updateTicket } from '../../modules/tickets/service.js';
 import { decideRefund, requestRefund } from '../../modules/refunds/service.js';
@@ -151,8 +151,14 @@ export async function ownerOpsRoutes(app: FastifyInstance, ctx: Ctx) {
         note: z.string().max(500).nullable().optional(),
       })
       .parse(req.body);
-    const r = await requestRefund(ctx, { ...b, tenantId: o.tenantId });
-    await assertShopAccess(ctx, o, r.shop_id);
+    // Check access to the shop the ticket/payment belongs to *before* creating anything.
+    const source = b.ticketId
+      ? await ctx.db.selectFrom('tickets').select('shop_id').where('id', '=', b.ticketId).where('tenant_id', '=', o.tenantId).executeTakeFirst()
+      : b.paymentId
+        ? await ctx.db.selectFrom('payments').select('shop_id').where('id', '=', b.paymentId).where('tenant_id', '=', o.tenantId).executeTakeFirst()
+        : undefined;
+    if (source) await assertShopAccess(ctx, o, source.shop_id);
+    const r = await requestRefund(ctx, { ...b, tenantId: o.tenantId, actorId: o.userId });
     await audit(ctx, actorOf(req), 'refund.create', 'refund', r.id, undefined, b);
     return { refund: r };
   });
@@ -264,6 +270,11 @@ export async function ownerOpsRoutes(app: FastifyInstance, ctx: Ctx) {
     const o = requirePerm(req, 'maintenance.manage');
     const b = planSchema.parse(req.body);
     await assertShopAccess(ctx, o, b.shopId);
+    if (b.machineId) {
+      const m = await ctx.db.selectFrom('machines').select('shop_id').where('id', '=', b.machineId).where('tenant_id', '=', o.tenantId).executeTakeFirst();
+      if (!m) throw notFound('Machine');
+      if (m.shop_id !== b.shopId) throw badRequest('That machine is in a different shop');
+    }
     const p = await ctx.db
       .insertInto('maintenance_plans')
       .values({
@@ -287,6 +298,9 @@ export async function ownerOpsRoutes(app: FastifyInstance, ctx: Ctx) {
     const o = requirePerm(req, 'maintenance.manage');
     const { id } = z.object({ id: uuid }).parse(req.params);
     const b = z.object({ active: z.boolean().optional(), title: z.string().min(2).max(120).optional() }).parse(req.body);
+    const existing = await ctx.db.selectFrom('maintenance_plans').select('shop_id').where('id', '=', id).where('tenant_id', '=', o.tenantId).executeTakeFirst();
+    if (!existing) throw notFound('Plan');
+    await assertShopAccess(ctx, o, existing.shop_id);
     const p = await ctx.db.updateTable('maintenance_plans').set(b).where('id', '=', id).where('tenant_id', '=', o.tenantId).returningAll().executeTakeFirst();
     if (!p) throw notFound('Plan');
     await audit(ctx, actorOf(req), 'maintenance_plan.update', 'maintenance_plan', id, undefined, b);
@@ -341,6 +355,9 @@ export async function ownerOpsRoutes(app: FastifyInstance, ctx: Ctx) {
     const b = z
       .object({ name: z.string().min(2).max(100).optional(), items: z.array(itemSchema).min(1).max(40).optional(), active: z.boolean().optional() })
       .parse(req.body);
+    const existing = await ctx.db.selectFrom('checklist_templates').select('shop_id').where('id', '=', id).where('tenant_id', '=', o.tenantId).executeTakeFirst();
+    if (!existing) throw notFound('Checklist');
+    await assertShopAccess(ctx, o, existing.shop_id);
     const t = await ctx.db
       .updateTable('checklist_templates')
       .set({ ...(b.name && { name: b.name }), ...(b.items && { items: json(assignItemIds(b.items)) }), ...(b.active !== undefined && { active: b.active }) })

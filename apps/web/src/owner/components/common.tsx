@@ -232,13 +232,30 @@ export function Toggle({ checked, onChange, label, hint, disabled }: { checked: 
 // ---------------------------------------------------------------------------------------------
 // Modal / bottom sheet
 
-export function Modal({ open, onClose, title, children, footer, wide }: { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
+/** `dismissible={false}`: Escape and backdrop taps don't close it (for one-time secrets); use the buttons. */
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  footer,
+  wide,
+  dismissible = true,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: ReactNode;
+  footer?: ReactNode;
+  wide?: boolean;
+  dismissible?: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && dismissible && onClose();
     document.addEventListener('keydown', onKey);
     const first = ref.current?.querySelector<HTMLElement>('input, select, textarea, button:not([data-close])');
     (first ?? ref.current)?.focus();
@@ -246,10 +263,10 @@ export function Modal({ open, onClose, title, children, footer, wide }: { open: 
       document.removeEventListener('keydown', onKey);
       prev?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open, onClose, dismissible]);
   if (!open) return null;
   return (
-    <div className="no-print fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="no-print fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onMouseDown={(e) => dismissible && e.target === e.currentTarget && onClose()}>
       <div
         ref={ref}
         role="dialog"

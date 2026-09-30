@@ -190,7 +190,7 @@ function TicketControls({ d, staff }: { d: TicketDetail; staff: StaffRow[] }) {
   );
 }
 
-const EVENT_ICON: Record<string, IconName> = { created: 'ticket', evidence: 'sensor', status: 'check', severity: 'alert', assign: 'users', comment: 'edit' };
+const EVENT_ICON: Record<string, IconName> = { created: 'ticket', evidence: 'sensor', status: 'check', severity: 'alert', assign: 'users', comment: 'edit', refund: 'refund' };
 
 function EventRow({ e, staffName }: { e: TicketEvent; staffName: (id: unknown) => string }) {
   const data = e.data ?? {};
@@ -215,6 +215,10 @@ function EventRow({ e, staffName }: { e: TicketEvent; staffName: (id: unknown) =
       break;
     case 'comment':
       title = 'Note';
+      break;
+    case 'refund':
+      title = e.body ?? 'Refund updated';
+      body = null;
       break;
   }
   return (
@@ -272,10 +276,20 @@ function Refunds({ d }: { d: TicketDetail }) {
   const [method, setMethod] = useState<RefundMethod>(d.payment ? 'original' : 'duitnow');
   const [phone, setPhone] = useState(t.contact_phone && !t.contact_phone.startsWith('•') ? t.contact_phone : '');
   const [note, setNote] = useState('');
+  const defaults = () => {
+    setAmount(senToRmInput(t.amount_claimed_sen ?? refundable ?? null));
+    setMethod(d.payment ? 'original' : 'duitnow');
+    setPhone(t.contact_phone && !t.contact_phone.startsWith('•') ? t.contact_phone : '');
+    setNote('');
+  };
   const create = useApiMutation(
     () => api.post('/owner/refunds', { ticketId: t.id, amountSen: parseRm(amount), method, payoutPhone: phone.trim() || null, note: note.trim() || null }),
     [['owner', 'ticket', t.id], ['owner', 'refunds'], ['owner', 'overview']],
-    () => setOpen(false),
+    () => {
+      // Reset so reopening the form doesn't invite a duplicate refund with the same values.
+      defaults();
+      setOpen(false);
+    },
   );
   const amountSen = parseRm(amount);
   const methods = REFUND_METHODS.filter((m) => m !== 'original' || d.payment);

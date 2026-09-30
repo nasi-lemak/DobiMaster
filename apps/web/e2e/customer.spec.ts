@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { createMachine, OWNER_STATE, SHOPS, shopBySlug } from './helpers';
 
 // A plain customer: no owner cookie, fresh guest.

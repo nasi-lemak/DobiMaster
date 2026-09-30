@@ -24,9 +24,11 @@ export function MachinesPage() {
   const add = useApiMutation(
     (b: MachinePayload) => api.post<{ machines: OwnerMachine[] }>('/owner/machines', b),
     [['owner', 'machines'], ['owner', 'shop'], ['owner', 'overview']],
-    (r) => {
+    (r, vars) => {
       setAdding(false);
       setAdded(r.machines.map((m) => m.code));
+      // The form has its own shop picker: show the list the machines were actually added to.
+      if (typeof vars.shopId === 'string' && vars.shopId !== shopId) setParams({ shop: vars.shopId });
     },
   );
 

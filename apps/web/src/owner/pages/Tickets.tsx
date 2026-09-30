@@ -100,7 +100,8 @@ export function TicketsPage() {
           )
         }
       </QueryState>
-      <NewTicketModal open={creating} onClose={() => setCreating(false)} defaultShopId={shopId} />
+      {/* Mounted only while open, so each new ticket starts blank and defaults to the shop being filtered. */}
+      {creating && <NewTicketModal open onClose={() => setCreating(false)} defaultShopId={shopId} />}
     </>
   );
 }

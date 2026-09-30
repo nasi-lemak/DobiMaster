@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { OWNER } from './helpers';
 
 // No stored session: this spec exercises the real login form.
