@@ -1,0 +1,31 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dobi
+          POSTGRES_PASSWORD: dobi
+          POSTGRES_DB: dobimaster_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U dobi" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r typecheck
+      - run: pnpm --filter @dobi/api test
+        env:
+          TEST_DATABASE_URL: postgres://dobi:dobi@localhost:5432/dobimaster_test
+      - run: pnpm --filter @dobi/web build
+      - run: pnpm --filter @dobi/api build

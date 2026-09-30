@@ -1,0 +1,27 @@
+# Local/pilot deployment: Postgres + the app. For production put Caddy/Traefik in front for TLS.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: dobi
+      POSTGRES_PASSWORD: dobi
+      POSTGRES_DB: dobimaster
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U dobi']
+      interval: 5s
+      retries: 10
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://dobi:dobi@db:5432/dobimaster
+      PUBLIC_URL: http://localhost:3000
+      JWT_SECRET: change-me-to-a-long-random-string-change-me
+    ports:
+      - '3000:3000'
+volumes:
+  pgdata:

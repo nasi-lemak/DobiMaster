@@ -1,0 +1,151 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens. Light is default; dark is selected (not auto-inverted) and applies via OS setting
+ * unless the user forces a theme with data-theme on <html>.
+ * Status/state colours follow the dataviz reference status palette and always ship with a text label + icon.
+ */
+:root {
+  color-scheme: light;
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --surface-2: #f1f3f6;
+  --border: rgba(11, 11, 11, 0.1);
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #6f6e69;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --brand: #0f6fb8;
+  --brand-ink: #ffffff;
+  --brand-soft: #e3f0fb;
+
+  /* categorical (dataviz reference palette, light steps) */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  /* sequential blue ramp for heatmaps */
+  --seq-100: #cde2fb;
+  --seq-250: #86b6ef;
+  --seq-400: #3987e5;
+  --seq-550: #1c5cab;
+  --seq-700: #0d366b;
+
+  /* status palette (reserved) */
+  --good: #0ca30c;
+  --good-ink: #006300;
+  --warning: #fab219;
+  --warning-ink: #7a5200;
+  --serious: #ec835a;
+  --serious-ink: #9a3b12;
+  --critical: #d03b3b;
+  --critical-ink: #a32424;
+  --info-ink: #1c5cab;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #232321;
+    --border: rgba(255, 255, 255, 0.1);
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #9a9890;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --brand: #3b95dc;
+    --brand-ink: #0b0b0b;
+    --brand-soft: #16283a;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --seq-100: #16283a;
+    --seq-250: #184f95;
+    --seq-400: #2a78d6;
+    --seq-550: #6da7ec;
+    --seq-700: #b7d3f6;
+    --good-ink: #3ecf3e;
+    --warning-ink: #fab219;
+    --serious-ink: #f09a78;
+    --critical-ink: #ef7474;
+    --info-ink: #86b6ef;
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --border: rgba(255, 255, 255, 0.1);
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --muted: #9a9890;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --brand: #3b95dc;
+  --brand-ink: #0b0b0b;
+  --brand-soft: #16283a;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --seq-100: #16283a;
+  --seq-250: #184f95;
+  --seq-400: #2a78d6;
+  --seq-550: #6da7ec;
+  --seq-700: #b7d3f6;
+  --good-ink: #3ecf3e;
+  --warning-ink: #fab219;
+  --serious-ink: #f09a78;
+  --critical-ink: #ef7474;
+  --info-ink: #86b6ef;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--border);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-soft: var(--brand-soft);
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+  --color-good: var(--good);
+  --color-good-ink: var(--good-ink);
+  --color-warning: var(--warning);
+  --color-warning-ink: var(--warning-ink);
+  --color-serious: var(--serious);
+  --color-serious-ink: var(--serious-ink);
+  --color-critical: var(--critical);
+  --color-critical-ink: var(--critical-ink);
+  --color-info-ink: var(--info-ink);
+  --font-sans: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+body {
+  min-height: 100dvh;
+}
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+}

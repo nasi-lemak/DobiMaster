@@ -1,0 +1,106 @@
+# DobiMaster
+
+**Smart-laundromat capabilities for existing self-service dobi, without replacing the machines.**
+
+For customers:
+- See which dobi nearby is open and has a free machine of the right size.
+- Scan the QR on any machine to get instructions in Bahasa Melayu, English or 中文.
+- Get told when the laundry is almost done and when it's finished.
+- Report a problem in two taps.
+
+No app install and no sign-up.
+
+For owners:
+- One screen answers "is everything OK at my shops, and what needs me?"
+- Tickets, refunds, cash reconciliation, maintenance, cleaning checklists and capacity analytics.
+- It starts with software only. Adding a cheap off-the-shelf power sensor per machine turns check-in-based status into live, sensor-verified status.
+
+## Design documents
+
+| Doc | Contents |
+|---|---|
+| [docs/01-discovery.md](docs/01-discovery.md) | Customer and owner journey maps, top pain points, design principles |
+| [docs/02-product.md](docs/02-product.md) | Features ranked MVP / Phase 2 / Phase 3, what **not** to build, wireframes for every screen |
+| [docs/03-architecture.md](docs/03-architecture.md) | Domain model, API, real-time events, IoT (observe vs. control), payments |
+| [docs/04-business.md](docs/04-business.md) | Competitor comparison, infrastructure cost (1/10/100 shops), pricing, risks, staged plan |
+| [docs/research/competitor-research.md](docs/research/competitor-research.md) | Sourced market research: Malaysian QR retrofit vendors, chains, payment rails, complaints |
+
+## What's in the MVP
+
+| Area | Built |
+|---|---|
+| **Customer PWA** (`/`) | Nearby shops with availability per washer/dryer, labelled by confidence (live / partly live / from check-ins); "usually busy now" profile; shop page (hours, prices by capacity, facilities, announcements, directions, WhatsApp); **machine QR page** (`/m/:code`); laundry timer with push at *N min left*, *finished* and *still not collected*; "collected" frees the machine; problem reports (auto-linked to the machine, the reporter's cycle and payment); pay & start on controllable machines with a receipt; BM / EN / 中文 (Tamil-ready); offline-tolerant (idempotent retries, local countdown, cached shell) |
+| **Owner dashboard** (`/owner`) | Overview with a needs-attention list; branch live view; machine detail and timeline; tickets; refunds; cash collections and reconciliation; analytics (revenue, utilisation, peak-hour heatmap, capacity insight, low usage); maintenance plans (days / cycles / run-hours); checklists; announcements; QR sticker sheets; sensors; staff and roles; audit log |
+| **Backend** | Fastify + Postgres modular monolith; a single machine-state reducer with honest sources; durable job queue (reminders, timeouts, sweeps); Postgres LISTEN/NOTIFY → WebSocket fan-out; RBAC with branch scoping; audit log; power-based cycle detector with vendor adapters (generic, Shelly); **payment pipeline with idempotency, signed-webhook de-dup, start confirmed by sensor or auto-refund**; mock gateway and simulated controller |
+| **Alerts** | Repeated faults, sensor offline, stuck cycle, short cycle ("paid 40 min, ran 26"), silent / low-usage machine, maintenance due, failed start |
+
+## Run it locally
+
+Prerequisites: Node 22, pnpm 10, PostgreSQL 16.
+
+```bash
+pnpm install
+psql -c "CREATE ROLE dobi LOGIN SUPERUSER PASSWORD 'dobi'"   # matches apps/api/.env.example
+createdb -O dobi dobimaster && createdb -O dobi dobimaster_test
+cp apps/api/.env.example apps/api/.env
+
+pnpm --filter @dobi/api seed      # migrates, then loads 3 demo shops + 5 weeks of history
+pnpm --filter @dobi/api dev       # API on :3000
+pnpm --filter @dobi/web dev       # web on :5173 (proxies /api and /ws)
+```
+
+Try the following:
+- **Customer:** http://localhost:5173 → open a shop → tap a machine. Or go straight to the machine page for SS2 W3: http://localhost:5173/m/demo-ss2-w3
+- **Pay & start** (mock gateway, simulated machine): http://localhost:5173/m/demo-ss2-w1
+- **Owner:** http://localhost:5173/owner, using one of these accounts:
+  - `owner@dobiceria.my` / `demo1234`
+  - `manager@dobiceria.my` / `demo1234`
+  - `staff@dobiceria.my` / `demo1234` (SS2 only, no revenue)
+- **Fake a sensor:** `pnpm --filter @dobi/api simulate -- --token demo-dobi-ceria-ss2-W4 --minutes 2`. Then watch W4 go running → finished live in both UIs.
+
+The demo covers three realities:
+- **SS2:** every machine has a (simulated) sensor, and W1/W2 support pay-in-app.
+- **Damansara Uptown:** no sensors. Status comes only from check-ins; W4 is under maintenance; W2's cash shows a shortfall against its counter.
+- **Kepong:** mixed. One sensor is offline, and W4 has gone silent (possibly a jammed coin mechanism).
+
+### Tests
+
+```bash
+pnpm --filter @dobi/api test      # unit + integration tests against dobimaster_test
+pnpm -r typecheck
+```
+
+The integration tests cover:
+- the timer and notification lifecycle
+- merging a check-in with a sensor-detected cycle
+- offline detection and recovery
+- the fault threshold
+- pay → sensor-confirmed start
+- auto-refund when a start isn't confirmed
+- duplicate and forged webhooks
+- RBAC and tenant isolation
+- cash reconciliation
+
+### Deploy
+
+`docker compose up --build` runs Postgres and one container that serves both the API and the built PWA on :3000. For production:
+- Put Caddy or Traefik in front for TLS.
+- Set `JWT_SECRET`, `PUBLIC_URL` and, optionally, VAPID keys.
+- Use managed Postgres (see the cost table in docs/04-business.md).
+
+## Repository layout
+
+```
+apps/api      Fastify API, jobs, WebSocket hub, migrations (plain SQL), seed & simulator CLIs, tests
+apps/web      React + Vite + Tailwind PWA — src/customer (multilingual), src/owner (lazy-loaded dashboard)
+packages/shared  Domain enums, types, role→permission map shared by both
+docs          Design documents and research
+```
+
+## Key design decisions
+
+- **The shop works exactly as before.** The app is additive. Coins still work. Nothing depends on our uptime or the shop's Wi-Fi.
+- **Honest status.** Every machine state carries its source (sensor / customer / staff / payment). Without sensors the customer sees "from check-ins", never fake live counts. A silent sensor means "no live status", not "broken".
+- **Observe before control.** Monitoring (clamp sensors) works on nearly every machine and is safe. Remote start is per model and opt-in, and a start **only counts when the sensor confirms it**. Otherwise the customer is refunded automatically and the machine is flagged.
+- **No wallet.** Pay per cycle, direct to the owner's merchant account. This avoids e-money licensing and forced top-ups, the #1 complaint about chain apps.
+- **Modular monolith.** One deployable and one database, with clear modules and events between them. There's a documented path to scale (rollups, Redis/NATS bus, MQTT broker).

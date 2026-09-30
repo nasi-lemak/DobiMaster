@@ -1,0 +1,13 @@
+{
+  "name": "dobimaster",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "db:migrate": "pnpm --filter @dobi/api migrate",
+    "db:seed": "pnpm --filter @dobi/api seed"
+  }
+}
