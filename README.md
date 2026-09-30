@@ -23,6 +23,7 @@ For owners:
 | [docs/02-product.md](docs/02-product.md) | Features ranked MVP / Phase 2 / Phase 3, what **not** to build, wireframes for every screen |
 | [docs/03-architecture.md](docs/03-architecture.md) | Domain model, API, real-time events, IoT (observe vs. control), payments |
 | [docs/04-business.md](docs/04-business.md) | Competitor comparison, infrastructure cost (1/10/100 shops), pricing, risks, staged plan |
+| [docs/INSTALL-sensors.md](docs/INSTALL-sensors.md) | Installer checklist: choosing Shelly models, DB/clamp installation, connecting, verifying a first cycle, troubleshooting |
 | [docs/research/competitor-research.md](docs/research/competitor-research.md) | Sourced market research: Malaysian QR retrofit vendors, chains, payment rails, complaints |
 
 ## What's in the MVP
@@ -38,6 +39,7 @@ For owners:
 | **Photos** | Customers can add up to 3 photos to a report. Checklist items can require a photo as proof of cleaning. Photos are resized and re-encoded on the phone, which strips EXIF/GPS. The server accepts JPEG/PNG/WebP by magic bytes only. Photos are served only to owners with access to that shop. |
 | **Owner accounts** | One server-side session per signed-in device. Logout ends it for real. *Account & devices* (`/owner/security`) lists devices, signs out others, and changes your password (which also signs out other devices). *Forgot password?* emails a single-use 30-minute link, without revealing whether an account exists. Removing a staff member ends their access immediately. |
 | **"Notify me when free"** | At shops where the machine class is fully sensored, a customer can wait for, say, a 15 kg washer. Each machine that frees up notifies exactly one waiting customer, in order, so a single free machine doesn't send five people rushing over. Nothing is reserved. |
+| **Shelly sensors** | An on-device script ([`devices/shelly/dobimaster-sensor.js`](devices/shelly/dobimaster-sensor.js)) for Shelly EM Gen3 / Pro EM / Plus 1PM / PM Mini. It reports every 10 s while running, sends a heartbeat every 60 s when idle, buffers about 10 minutes through Wi-Fi drops, handles a reversed clamp, and supports two machines per EM. Registering a Shelly sensor shows the script with its URL, token and channel filled in. It is tested against a simulated Shelly end to end, **not yet on a physical device**. The installer checklist is [docs/INSTALL-sensors.md](docs/INSTALL-sensors.md). |
 | **Sensor analytics** | Energy is measured per cycle. *Electricity per cycle* in Analytics multiplies it by the shop's tariff (Shop settings) to give cost and share of price per machine. The demo data shows dryers at about 24% vs washers at about 5%. A whole shop's sensors going silent together raises one "power / internet outage" alert instead of one per machine. A dryer drawing far less power than its own usual raises "heater may be failing". |
 | **Privacy (PDPA)** | Daily retention sweep. Refund phone numbers are removed 90 days after a case closes, report photos after 180 days, and inactive WhatsApp numbers after 180 days. The WhatsApp message log is kept for 30 days. |
 
@@ -90,7 +92,7 @@ The integration tests cover:
 - RBAC and tenant isolation
 - cash reconciliation
 
-Browser end-to-end tests (Playwright, 24 tests) run on an isolated stack: database `dobimaster_e2e` (created with `createdb -O dobi dobimaster_e2e`), API on :3100 and web on :5180. The database is reseeded on every run.
+Browser end-to-end tests (Playwright, 25 tests) run on an isolated stack: database `dobimaster_e2e` (created with `createdb -O dobi dobimaster_e2e`), API on :3100 and web on :5180. The database is reseeded on every run.
 
 ```bash
 pnpm --filter @dobi/web test:e2e

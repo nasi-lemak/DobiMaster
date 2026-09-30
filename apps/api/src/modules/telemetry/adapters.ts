@@ -40,6 +40,8 @@ const shellySchema = z.object({
 export const shellyAdapter: ObservationAdapter = {
   kind: 'shelly',
   parse(payload, receivedAt) {
+    // The DobiMaster Shelly script (devices/shelly/dobimaster-sensor.js) sends our generic batch format.
+    if (payload && typeof payload === 'object' && 'samples' in payload) return genericPowerAdapter.parse(payload, receivedAt);
     const items = Array.isArray(payload) ? payload : [payload];
     return items.map((raw) => {
       const p = shellySchema.parse(raw);

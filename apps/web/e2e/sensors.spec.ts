@@ -64,3 +64,28 @@ test('register a sensor for a machine, copy the one-time token, ingest a sample 
   const bad = await request.post('/api/v1/device/telemetry', { headers: { authorization: 'Bearer nope' }, data: { samples: [{ powerW: 1 }] } });
   expect(bad.status()).toBe(401);
 });
+
+test('registering a Shelly shows a ready-to-paste script with this sensor’s token and channel filled in', async ({ page }) => {
+  const shop = await shopBySlug(page.request, SHOPS.damansara.slug);
+  const machine = await createMachine(page.request, shop.id);
+  await openOwner(page);
+  await navTo(page, 'Sensors');
+  await page.getByRole('button', { name: 'Register sensor' }).click();
+  const form = page.getByRole('region', { name: 'Register a sensor' });
+  await form.getByRole('combobox', { name: 'Shop' }).selectOption({ label: shop.name });
+  await form.getByLabel('Machine it measures').selectOption({ label: `${machine.code} · washer 10 kg` });
+  await expect(form.getByLabel('Kind')).toHaveValue('shelly'); // the recommended default
+  await form.getByRole('button', { name: 'Register & get token' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Sensor registered' });
+  const token = await dialog.getByLabel('Device token').inputValue();
+  const script = dialog.getByLabel('Shelly script');
+  await expect(script).toHaveValue(new RegExp(`token: "${token}"`));
+  await expect(script).toHaveValue(/component: "em1:0"/);
+  await expect(script).toHaveValue(/url: "http[^"]+\/api\/v1\/device\/telemetry"/);
+  await expect(script).not.toHaveValue(/__TOKEN__|__COMPONENT__|__INGEST_URL__/);
+
+  await dialog.getByLabel(/Which Shelly/).selectOption({ label: 'Shelly PM Mini Gen3 (inline, max 16 A)' });
+  await expect(script).toHaveValue(/component: "pm1:0"/);
+  await dialog.getByRole('button', { name: "I've saved the token" }).click();
+});

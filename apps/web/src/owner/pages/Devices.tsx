@@ -8,10 +8,12 @@ import { Icon } from '../components/icons';
 import { k, qs, useApi, useApiMutation } from '../lib/queries';
 import { useCan, useMe, useShopName } from '../lib/session';
 import type { DeviceRow, OwnerMachine } from '../lib/types';
+// The on-device script lives at the repo root so the API tests run the exact same file.
+import shellyTemplate from '../../../../../devices/shelly/dobimaster-sensor.js?raw';
 
 const KINDS = [
   { value: 'generic_power', label: 'Generic power monitor (HTTP)' },
-  { value: 'shelly', label: 'Shelly Plus 1PM / Pro EM' },
+  { value: 'shelly', label: 'Shelly (EM Gen3, Pro EM, Plus 1PM, PM Mini)' },
   { value: 'esp32_ct', label: 'ESP32 + CT clamp' },
   { value: 'simulator', label: 'Simulator (testing)' },
 ] as const;
@@ -97,7 +99,7 @@ function RegisterForm({ onCancel, onDone }: { onCancel: () => void; onDone: (r: 
   const me = useMe();
   const [shopId, setShopId] = useState(me.shops[0]?.id ?? '');
   const [machineId, setMachineId] = useState('');
-  const [kind, setKind] = useState<string>('generic_power');
+  const [kind, setKind] = useState<string>('shelly');
   const [label, setLabel] = useState('');
   const [heartbeat, setHeartbeat] = useState('60');
   const machines = useApi<{ machines: OwnerMachine[] }>(k.machines(shopId), `/owner/machines${qs({ shopId })}`, { enabled: !!shopId });
@@ -187,6 +189,7 @@ function TokenModal({ r, onClose }: { r: Registered; onClose: () => void }) {
           <CopyButton text={r.token} />
         </div>
       </Field>
+      {r.device.kind === 'shelly' && <ShellySetup r={r} />}
       <div className="mt-4">
         <div className="mb-1 flex items-center justify-between">
           <span className="text-sm font-medium">Test it: send one power reading</span>
@@ -198,5 +201,68 @@ function TokenModal({ r, onClose }: { r: Registered; onClose: () => void }) {
         </p>
       </div>
     </Modal>
+  );
+}
+
+const SHELLY_CHANNELS = [
+  { value: 'em1:0', label: 'Shelly EM Gen3 / Pro EM — clamp 1' },
+  { value: 'em1:1', label: 'Shelly EM Gen3 / Pro EM — clamp 2' },
+  { value: 'switch:0', label: 'Shelly Plus 1PM / Pro 1PM (inline, max 16 A)' },
+  { value: 'pm1:0', label: 'Shelly PM Mini Gen3 (inline, max 16 A)' },
+] as const;
+
+/** Ready-to-paste on-device script with URL, token and channel filled in, plus install steps. */
+function ShellySetup({ r }: { r: Registered }) {
+  const [component, setComponent] = useState<string>('em1:0');
+  const script = shellyTemplate.replace('__INGEST_URL__', r.ingestUrl).replace('__COMPONENT__', component).replace('__TOKEN__', r.token);
+  const download = () => {
+    const url = URL.createObjectURL(new Blob([script], { type: 'text/javascript' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `dobimaster-${(r.device.label || r.device.id.slice(0, 8)).replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.js`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  return (
+    <section className="mt-4 space-y-3 rounded-xl border border-line p-3" aria-labelledby="shelly-setup-title">
+      <h3 id="shelly-setup-title" className="text-sm font-semibold">
+        Set up the Shelly
+      </h3>
+      <Field label="Which Shelly, and which channel measures this machine?" hint="Dryers and big washers need a clamp model (EM); the inline models are for small washers only.">
+        <select className={inputClass} value={component} onChange={(e) => setComponent(e.target.value)}>
+          {SHELLY_CHANNELS.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-2">
+        <li>Connect the Shelly to the shop Wi-Fi (Shelly app, or its own hotspot at 192.168.33.1) and update its firmware.</li>
+        <li>
+          Open the Shelly’s web page → <strong>Scripts</strong> → <strong>Create script</strong>, paste the script below and save.
+        </li>
+        <li>
+          Turn on <strong>Run on startup</strong>, then press <strong>Start</strong>.
+        </li>
+        <li>Run one cycle on the machine and check it shows as running, then finished, in DobiMaster.</li>
+      </ol>
+      <div>
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-sm font-medium">Script (contains this sensor’s token — don’t share it)</span>
+          <span className="flex shrink-0 gap-2 whitespace-nowrap">
+            <CopyButton text={script} label="Copy script" />
+            <Button size="sm" variant="secondary" onClick={download}>
+              Download
+            </Button>
+          </span>
+        </div>
+        <textarea readOnly aria-label="Shelly script" className={`${inputClass} h-40 font-mono text-[11px] leading-snug`} value={script} onFocus={(e) => e.currentTarget.select()} />
+      </div>
+      <p className="text-xs text-muted">
+        One Shelly EM measuring two machines? Register the second machine’s sensor too, then add its line to <code>channels</code> in the same script:{' '}
+        <code className="break-all">{'{ component: "em1:1", token: "<second token>" }'}</code>. The full installer checklist is in <code>docs/INSTALL-sensors.md</code>.
+      </p>
+    </section>
   );
 }
