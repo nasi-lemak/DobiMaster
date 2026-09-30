@@ -29,6 +29,7 @@ export interface Me {
   permissions: Permission[];
   tenant: { id: string; name: string; plan: string };
   shops: Array<{ id: string; name: string; slug: string }>;
+  preferences: { digestOptOut: boolean; whatsappLinked: boolean; whatsappMode: 'cloud' | 'mock' | 'disabled' };
 }
 
 export interface Branch {
@@ -265,6 +266,7 @@ export interface TicketDetail {
   payment: { id: string; amount_sen: number; status: string; refunded_sen: number; created_at: string } | null;
   refunds: RefundRow[];
   cycle: { id: string; status: string; started_at: string; ended_at: string | null; source: string; sensor_confirmed: boolean; program_name: string | null } | null;
+  photos: Array<{ id: string; url: string; createdAt: string }>;
 }
 
 export interface AlertRow {
@@ -372,7 +374,7 @@ export interface ChecklistRun {
   shopName: string;
   name: string;
   date: string;
-  items: Array<{ id: string; label: string; done: { by: string; byName: string; at: string } | null }>;
+  items: Array<{ id: string; label: string; photoRequired?: boolean; done: { by: string; byName: string; at: string; photoUrl: string | null } | null }>;
   done: number;
   total: number;
   completedAt: string | null;
@@ -382,7 +384,7 @@ export interface ChecklistTemplate {
   id: string;
   shop_id: string;
   name: string;
-  items: Array<{ id: string; label: string }>;
+  items: Array<{ id: string; label: string; photoRequired?: boolean }>;
   active: boolean;
 }
 

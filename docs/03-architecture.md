@@ -291,10 +291,29 @@ Most shops keep coins or their existing QR boards. Revenue from those enters as 
 
 ---
 
+## Notifications and messaging (added after the MVP)
+
+- `Notifier` fans customer notifications out to **web push** (every subscribed device) and **WhatsApp** (if linked).
+- **WhatsApp linking is customer-initiated:**
+  1. `POST /public/whatsapp/link` returns a `wa.me/<business number>?text=DOBI-XXXXXX` link, valid for 30 minutes.
+  2. The customer presses send.
+  3. The Cloud API webhook (`/webhooks/whatsapp`, X-Hub-Signature-256 verified) calls `handleInbound`, which links `wa_contacts.wa_id` to the guest and stamps `last_inbound_at`.
+- **Sending rule:** free-form text only while `now − last_inbound_at < 24 h − 10 min`, which is WhatsApp's customer-service window and so costs nothing. Outside it, only an approved template is sent, and only where configured (the owner digest). Otherwise the message is skipped and logged as `skipped_window`.
+- STOP/START are handled. The transport is pluggable (`CloudApiTransport` / `MockWhatsAppTransport`).
+- **Weekly digest:** the hourly `sweep.digest` sends on Monday from 08:00 in the tenant's timezone. `digest_log (tenant, week_start)` makes it exactly-once across replicas. Recipients are owners and managers, each with a digest scoped to their shops. Revenue is included only with `revenue.view`.
+- **Mail** goes through a `MailTransport`: SMTP when `SMTP_URL` is set, otherwise logged.
+
+## Photos
+
+- **Storage:** an `attachments` row plus a `BlobStore`: local disk for a single-VPS pilot, and an S3-compatible implementation when running multiple replicas.
+- **Upload:** the raw image body is posted (`/public/uploads` for guests, `/owner/uploads` for staff), max 3 MB. The type is taken from the magic bytes, never from the declared `Content-Type`.
+- **Linking:** photos are linked to a ticket (customer's own uploads only) or to a checklist item (the uploader's own). Unlinked uploads are deleted after 24 h.
+- **Serving:** `/owner/attachments/:id` is cookie-authenticated with a shop-access check, and sends `nosniff`, a restrictive CSP and a private cache.
+
 ## Cross-cutting
 
 - **Security:** argon2 or bcrypt password hashes; httpOnly SameSite=Lax session cookie for owners; guest tokens have low privilege (they only reach the guest's own cycles and reports); per-device tokens stored hashed; rate limiting on public POSTs; QR tokens are random (not guessable sequences). **QR tampering ("quishing"):** stickers point only to our domain, and the page shows the machine code, which must match the machine's physical label. Payments never happen outside our domain or the gateway's.
-- **Privacy (Malaysian PDPA):** guests are anonymous. Phone numbers are collected only for refunds, with purpose shown. Retention rules: report contact details are purged 90 days after resolution. Host in Malaysia or Singapore.
+- **Privacy (Malaysian PDPA):** guests are anonymous. Phone numbers are collected only for refunds, with the purpose shown. The daily `sweep.privacy` job enforces retention: refund phone numbers 90 days after a case closes, report photos 180 days, inactive WhatsApp numbers 180 days, the WhatsApp message log 30 days. Host in Malaysia or Singapore.
 - **Audit log** for every owner-side write: actor, before/after, IP.
 - **Observability:** structured logs (pino), request ids, a `/health` endpoint, job-failure counters, and alerts on job backlog.
 - **Offline and failure safety:** client-side idempotent UUIDs with retry, and a countdown that keeps running locally without a network. The shop never depends on our uptime: machines still take coins. Pay-in-app is hidden when the device is offline.

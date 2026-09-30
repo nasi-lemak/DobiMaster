@@ -37,15 +37,17 @@ export function AlertsPage() {
           q.data!.alerts.length === 0 ? (
             <EmptyState title={status === 'open' ? 'No open alerts' : 'Nothing here'}>Alerts are raised automatically and can also be sent to your phone.</EmptyState>
           ) : (
-            <Card className={`divide-y divide-line ${q.isPlaceholderData ? 'opacity-60' : ''}`}>
+            <Card className={`divide-y divide-line ${q.isPlaceholderData ? 'opacity-60' : ''}`} role="list" aria-label="Alerts">
               {q.data!.alerts.map((a) => (
-                <div key={a.id} className="flex flex-wrap items-start gap-3 px-4 py-3">
+                <div key={a.id} role="listitem" className="flex flex-wrap items-start gap-3 px-4 py-3">
                   <div className="w-20 shrink-0 pt-0.5">
                     <SeverityTag severity={a.severity} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-xs font-medium text-muted">{ALERT_KIND_LABEL[a.kind] ?? titleCase(a.kind)}</div>
-                    <div className="text-sm">{a.message}</div>
+                    <div className="text-sm" data-testid="alert-message">
+                      {a.message}
+                    </div>
                     <div className="mt-0.5 text-xs text-muted">
                       {a.shop_name ?? 'All shops'}
                       {a.machine_id && (

@@ -43,7 +43,7 @@ export function CustomerLayout() {
       <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-line bg-bg/90 px-4 py-3 backdrop-blur">
         <Link to="/" className="flex min-w-0 items-center gap-2 font-semibold">
           <img src="/icon.svg" alt="" className="h-7 w-7 shrink-0" />
-          <span className="hidden min-[380px]:inline">{t('appName')}</span>
+          <span className="hidden min-[430px]:inline">{t('appName')}</span>
         </Link>
         <div className="flex items-center gap-2">
           <NavLink to="/me" className="relative whitespace-nowrap rounded-full px-2.5 py-1.5 text-sm font-medium text-ink-2 hover:bg-surface-2">

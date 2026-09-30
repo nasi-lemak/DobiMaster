@@ -59,6 +59,17 @@ export function TicketDetailPage() {
             <div className="grid gap-x-6 lg:grid-cols-[1fr_360px]">
               <div>
                 {can('tickets.manage') && <TicketControls d={d} staff={staff.data?.staff ?? []} />}
+                {d.photos.length > 0 && (
+                  <Section title={`Photos from the customer (${d.photos.length})`}>
+                    <div className="flex flex-wrap gap-2">
+                      {d.photos.map((p) => (
+                        <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="block">
+                          <img src={p.url} alt="Customer photo" loading="lazy" className="h-28 w-28 rounded-xl border border-line object-cover sm:h-36 sm:w-36" />
+                        </a>
+                      ))}
+                    </div>
+                  </Section>
+                )}
                 <Section title="Timeline">
                   <Card className="p-2">
                     <ol>

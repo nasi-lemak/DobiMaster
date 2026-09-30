@@ -38,9 +38,9 @@ export function RefundsPage() {
                 {done.length === 0 ? (
                   <EmptyState title="No decided refunds yet" />
                 ) : (
-                  <Card className="divide-y divide-line">
+                  <Card className="divide-y divide-line" role="list">
                     {done.map((r) => (
-                      <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
+                      <div key={r.id} role="listitem" className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
                         <div className="min-w-0">
                           <div className="font-medium">
                             {rm(r.amount_sen)} · {REFUND_METHOD_LABEL[r.method]} {r.automatic && <AutoTag />}
@@ -88,7 +88,7 @@ function RefundCard({ r }: { r: RefundRow }) {
   const manual = r.method !== 'original';
 
   return (
-    <Card className="p-4">
+    <Card className="p-4" role="article" aria-label={`Refund ${rm(r.amount_sen)}${r.ticket_ref ? ` for ticket #${r.ticket_ref}` : ''}`}>
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="text-2xl font-semibold">{rm(r.amount_sen)}</div>

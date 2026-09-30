@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../lib/api';
+import { api, uploadPhoto } from '../../lib/api';
+import { preparePhoto } from '../../lib/image';
 import { Button, Card, cx, EmptyState, Field, inputClass } from '../../components/ui';
 import { clock } from '../../lib/format';
 import { Meter, MutationError, PageHeader, QueryState, Section, ShopSelect, StatusTag, Toggle } from '../components/common';
@@ -39,7 +40,8 @@ function RunCard({ run }: { run: ChecklistRun }) {
   const qc = useQueryClient();
   const key = k.checklistsToday();
   const toggle = useMutation({
-    mutationFn: ({ itemId, done }: { itemId: string; done: boolean }) => api.post(`/owner/checklists/runs/${run.runId}/items/${encodeURIComponent(itemId)}`, { done }),
+    mutationFn: ({ itemId, done, photoId }: { itemId: string; done: boolean; photoId?: string }) =>
+      api.post(`/owner/checklists/runs/${run.runId}/items/${encodeURIComponent(itemId)}`, { done, photoId }),
     // Optimistic: a cleaner ticking items on a phone shouldn't wait for each round-trip.
     onMutate: async ({ itemId, done }) => {
       await qc.cancelQueries({ queryKey: key });
@@ -51,7 +53,7 @@ function RunCard({ run }: { run: ChecklistRun }) {
               ? r
               : {
                   ...r,
-                  items: r.items.map((i) => (i.id === itemId ? { ...i, done: done ? { by: me.user.id, byName: me.user.name, at: new Date().toISOString() } : null } : i)),
+                  items: r.items.map((i) => (i.id === itemId ? { ...i, done: done ? { by: me.user.id, byName: me.user.name, at: new Date().toISOString(), photoUrl: null } : null } : i)),
                   done: r.done + (done ? 1 : -1),
                 },
           ),
@@ -67,6 +69,23 @@ function RunCard({ run }: { run: ChecklistRun }) {
   });
   const allowed = can('checklists.complete');
   const complete = run.done >= run.total;
+  const [uploadingItem, setUploadingItem] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+
+  /** Proof of cleaning: take a photo, upload it, then tick the item with it. */
+  async function tickWithPhoto(itemId: string, file: File | undefined) {
+    if (!file) return;
+    setUploadingItem(itemId);
+    setPhotoError(null);
+    try {
+      const res = await uploadPhoto('/owner/uploads', await preparePhoto(file));
+      toggle.mutate({ itemId, done: true, photoId: res.attachment.id });
+    } catch (e) {
+      setPhotoError(e instanceof Error ? e.message : 'Could not upload the photo');
+    } finally {
+      setUploadingItem(null);
+    }
+  }
 
   return (
     <Card className="overflow-hidden">
@@ -89,10 +108,27 @@ function RunCard({ run }: { run: ChecklistRun }) {
       <ul>
         {run.items.map((i) => {
           const done = !!i.done;
+          const needsPhoto = !!i.photoRequired && !done;
+          const busy = uploadingItem === i.id;
           return (
-            <li key={i.id} className="border-b border-line last:border-0">
-              <label className={cx('flex min-h-14 items-center gap-3 px-4 py-3', allowed ? 'cursor-pointer hover:bg-surface-2' : 'opacity-80')}>
-                <input type="checkbox" className="peer sr-only" checked={done} disabled={!allowed} onChange={(e) => toggle.mutate({ itemId: i.id, done: e.target.checked })} />
+            <li key={i.id} className="flex items-center border-b border-line last:border-0">
+              <label className={cx('flex min-h-14 flex-1 items-center gap-3 px-4 py-3', allowed ? 'cursor-pointer hover:bg-surface-2' : 'opacity-80')}>
+                {needsPhoto ? (
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="peer sr-only"
+                    aria-label={`${i.label} — take a photo to tick`}
+                    disabled={!allowed || busy}
+                    onChange={(e) => {
+                      void tickWithPhoto(i.id, e.target.files?.[0]);
+                      e.target.value = '';
+                    }}
+                  />
+                ) : (
+                  <input type="checkbox" className="peer sr-only" checked={done} disabled={!allowed} onChange={(e) => toggle.mutate({ itemId: i.id, done: e.target.checked })} />
+                )}
                 <span
                   aria-hidden
                   className={cx(
@@ -100,17 +136,24 @@ function RunCard({ run }: { run: ChecklistRun }) {
                     done ? 'border-good bg-good text-white' : 'border-muted/60 bg-surface',
                   )}
                 >
-                  {done && <Icon name="check" className="h-5 w-5" />}
+                  {done ? <Icon name="check" className="h-5 w-5" /> : needsPhoto ? <span className="text-sm">{busy ? '…' : '📷'}</span> : null}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className={cx('block text-base', done && 'text-ink-2 line-through decoration-1')}>{i.label}</span>
-                  {i.done && (
+                  {i.done ? (
                     <span className="block text-xs text-muted">
                       {i.done.byName} · {clock(i.done.at)}
                     </span>
+                  ) : (
+                    i.photoRequired && <span className="block text-xs text-muted">{busy ? 'Uploading photo…' : 'Photo required — tap to take one'}</span>
                   )}
                 </span>
               </label>
+              {i.done?.photoUrl && (
+                <a href={i.done.photoUrl} target="_blank" rel="noreferrer" className="mr-3 shrink-0">
+                  <img src={i.done.photoUrl} alt={`Photo for ${i.label}`} loading="lazy" className="h-12 w-12 rounded-lg border border-line object-cover" />
+                </a>
+              )}
             </li>
           );
         })}
@@ -120,6 +163,7 @@ function RunCard({ run }: { run: ChecklistRun }) {
           <MutationError error={toggle.error} />
         </div>
       ) : null}
+      {photoError && <p className="px-4 pb-3 text-sm text-critical-ink">{photoError}</p>}
     </Card>
   );
 }
@@ -171,25 +215,16 @@ function Templates() {
   );
 }
 
-const slug = (s: string, taken: Set<string>) => {
-  const base = s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) || 'item';
-  let id = base;
-  for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
-  taken.add(id);
-  return id;
-};
-
 function TemplateForm({ template, onDone }: { template?: ChecklistTemplate; onDone: () => void }) {
   const me = useMe();
   const [shopId, setShopId] = useState(template?.shop_id ?? me.shops[0]?.id ?? '');
   const [name, setName] = useState(template?.name ?? 'Daily opening check');
   const [active, setActive] = useState(template?.active ?? true);
-  const [items, setItems] = useState<Array<{ id?: string; label: string }>>(template?.items ?? [{ label: '' }]);
+  const [items, setItems] = useState<Array<{ id?: string; label: string; photoRequired?: boolean }>>(template?.items ?? [{ label: '' }]);
   const save = useApiMutation(
     () => {
-      // Keep existing item ids (so today's ticks survive a rename); derive ids for new items.
-      const taken = new Set(items.map((i) => i.id).filter((x): x is string => !!x));
-      const clean = items.filter((i) => i.label.trim()).map((i) => ({ id: i.id ?? slug(i.label, taken), label: i.label.trim() }));
+      // Send existing item ids (so today's ticks survive a rename); the server assigns ids to new items.
+      const clean = items.filter((i) => i.label.trim()).map((i) => ({ ...(i.id ? { id: i.id } : {}), label: i.label.trim(), photoRequired: !!i.photoRequired }));
       return template
         ? api.patch(`/owner/checklists/templates/${template.id}`, { name: name.trim(), items: clean, active })
         : api.post('/owner/checklists/templates', { shopId, name: name.trim(), items: clean, active });
@@ -226,6 +261,14 @@ function TemplateForm({ template, onDone }: { template?: ChecklistTemplate; onDo
                 onChange={(e) => setItems((xs) => xs.map((x, j) => (j === idx ? { ...x, label: e.target.value } : x)))}
                 placeholder="e.g. Empty all dryer lint filters"
               />
+              <label className="flex shrink-0 items-center gap-1 text-xs text-ink-2" title="Staff must attach a photo to tick this item">
+                <input
+                  type="checkbox"
+                  checked={!!it.photoRequired}
+                  onChange={(e) => setItems((xs) => xs.map((x, j) => (j === idx ? { ...x, photoRequired: e.target.checked } : x)))}
+                />
+                📷 Photo
+              </label>
               <button type="button" aria-label={`Remove item ${idx + 1}`} className="rounded-full p-2 text-muted hover:bg-surface-2" onClick={() => setItems((xs) => xs.filter((_, j) => j !== idx))}>
                 <Icon name="x" className="h-4 w-4" />
               </button>

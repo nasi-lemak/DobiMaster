@@ -29,7 +29,7 @@ export function DueItemRow({ d, showMachine = true }: { d: DueItem; showMachine?
   const [open, setOpen] = useState(false);
   const s = STATUS[d.status];
   return (
-    <div className="p-4">
+    <div className="p-4" role="article" aria-label={`${d.machineCode}: ${d.title}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-sm font-medium">

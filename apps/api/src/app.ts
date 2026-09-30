@@ -16,6 +16,13 @@ import { registerJobs } from './jobs/register.js';
 import { AppError } from './lib/errors.js';
 import { SESSION_COOKIE, loadOwnerSession } from './auth/owner.js';
 import { PushService, WebPushTransport, ensureVapidKeys, type PushTransport } from './modules/push/service.js';
+import { Notifier } from './modules/notify/service.js';
+import { WhatsAppService, createWhatsAppTransport, type WhatsAppTransport } from './modules/whatsapp/service.js';
+import { createMailTransport, type MailTransport } from './modules/mail/service.js';
+import { LocalBlobStore, type BlobStore } from './modules/attachments/storage.js';
+import { whatsappRoutes } from './routes/whatsapp.js';
+import { attachmentRoutes } from './routes/attachments.js';
+import { ownerDigestRoutes } from './routes/owner/digest.js';
 import { createGateway, type PaymentGateway } from './modules/payments/gateway.js';
 import { defaultControllers, type ControllerRegistry } from './modules/control/controllers.js';
 import { publicRoutes, webhookRoutes } from './routes/public.js';
@@ -29,6 +36,9 @@ export interface BuildOptions {
   pool: pg.Pool;
   now?: () => Date;
   pushTransport?: PushTransport;
+  whatsappTransport?: WhatsAppTransport;
+  mail?: MailTransport;
+  blobs?: BlobStore;
   gateway?: PaymentGateway;
   controllers?: ControllerRegistry;
   /** Start the background job loop and periodic sweeps (off in tests — they call jobs.runDue()). */
@@ -49,12 +59,15 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
   const vapid = await ensureVapidKeys(db);
   PushService.configure(vapid);
 
+  const whatsapp = new WhatsAppService(db, opts.whatsappTransport ?? createWhatsAppTransport(), app.log, now);
   const ctx: Ctx = {
     db,
     pool: opts.pool,
     bus,
     jobs: new JobQueue(db, app.log, now, config.jobPollMs),
-    push: new PushService(db, opts.pushTransport ?? new WebPushTransport(), app.log),
+    notify: new Notifier(new PushService(db, opts.pushTransport ?? new WebPushTransport(), app.log), whatsapp),
+    mail: opts.mail ?? createMailTransport(app.log),
+    blobs: opts.blobs ?? new LocalBlobStore(config.uploadDir),
     gateway: opts.gateway ?? createGateway(),
     controllers: opts.controllers ?? defaultControllers(),
     now,
@@ -98,6 +111,9 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
       await ownerCoreRoutes(api, ctx);
       await ownerShopRoutes(api, ctx);
       await ownerOpsRoutes(api, ctx);
+      await ownerDigestRoutes(api, ctx);
+      await api.register(async (scoped) => attachmentRoutes(scoped, ctx));
+      await api.register(async (scoped) => whatsappRoutes(scoped, ctx));
       await api.register(async (hooks) => webhookRoutes(hooks, ctx));
     },
     { prefix: '/api/v1' },

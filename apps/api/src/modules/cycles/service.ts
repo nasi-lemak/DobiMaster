@@ -295,7 +295,7 @@ export async function finishCycle(ctx: Ctx, cycleId: string, endedAt: Date) {
   if (cycle.customer_id) {
     const { shop, machine } = await cycleContext(ctx, cycle);
     const s = shopSettings(shop);
-    await ctx.push.toCustomer(
+    await ctx.notify.toCustomer(
       cycle.customer_id,
       'cycle_finished',
       { machine: machine.code, shop: shop.name },
@@ -389,7 +389,7 @@ export function registerCycleJobs(ctx: Ctx) {
     if (!c || c.status !== 'running' || !c.customer_id) return;
     const { shop, machine } = await cycleContext(ctx, c);
     const min = Math.max(1, Math.round((c.expected_end_at.getTime() - ctx.now().getTime()) / 60_000));
-    await ctx.push.toCustomer(c.customer_id, 'cycle_almost_done', { machine: machine.code, shop: shop.name, min }, { url: '/me', tag: `cycle-${c.id}` });
+    await ctx.notify.toCustomer(c.customer_id, 'cycle_almost_done', { machine: machine.code, shop: shop.name, min }, { url: '/me', tag: `cycle-${c.id}` });
   });
 
   ctx.jobs.register('cycle.finish', async ({ cycleId }) => {
@@ -410,7 +410,7 @@ export function registerCycleJobs(ctx: Ctx) {
     const min = Math.round((ctx.now().getTime() - c.ended_at.getTime()) / 60_000);
     const sub = await ctx.db.selectFrom('push_subscriptions').select('locale').where('customer_id', '=', c.customer_id).executeTakeFirst();
     const policy = pickText(shop.policy, (sub?.locale as 'en') ?? 'en');
-    await ctx.push.toCustomer(c.customer_id, 'cycle_uncollected', { machine: machine.code, shop: shop.name, min, policy }, { url: '/me' });
+    await ctx.notify.toCustomer(c.customer_id, 'cycle_uncollected', { machine: machine.code, shop: shop.name, min, policy }, { url: '/me' });
     if (Number(n) < 2) {
       await ctx.jobs.schedule('cycle.uncollected', addMinutes(ctx.now(), 10), { cycleId, n: Number(n) + 1 }, `${jobKeys.uncollected(cycleId)}:${Number(n) + 1}`);
     }

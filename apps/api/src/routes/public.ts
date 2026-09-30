@@ -100,6 +100,7 @@ export async function publicRoutes(app: FastifyInstance, ctx: Ctx) {
           .regex(/^\+?[0-9 -]{8,16}$/, 'Enter a valid phone number')
           .optional()
           .nullable(),
+        attachmentIds: z.array(uuid).max(3).optional(),
       })
       .parse(req.body);
     if (!body.qrToken && !body.shopSlug) throw badRequest('qrToken or shopSlug required');

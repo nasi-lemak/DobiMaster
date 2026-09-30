@@ -26,7 +26,7 @@ export async function raiseAlert(ctx: Ctx, a: RaiseAlert) {
   const alert = { id, ...a, severity: a.severity ?? 'medium', status: 'open' };
   await ctx.bus.publish(channels.tenant(a.tenantId), 'alert.created', alert);
   if ((a.severity ?? 'medium') !== 'low') {
-    await ctx.push.toTenant(a.tenantId, { title: 'DobiMaster alert', body: a.message, url: '/owner', tag: a.dedupeKey }, a.shopId ?? undefined);
+    await ctx.notify.toTenant(a.tenantId, { title: 'DobiMaster alert', body: a.message, url: '/owner', tag: a.dedupeKey }, a.shopId ?? undefined);
   }
   return id;
 }

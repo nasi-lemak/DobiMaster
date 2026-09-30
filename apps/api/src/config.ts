@@ -35,4 +35,21 @@ export const config = {
   startConfirmSec: Number(env('START_CONFIRM_SEC', '90')),
   jobPollMs: Number(env('JOB_POLL_MS', '1000')),
   webDist: process.env.WEB_DIST,
+  /** Local directory for uploaded photos (swap the BlobStore for S3-compatible storage at scale). */
+  uploadDir: env('UPLOAD_DIR', './data/uploads'),
+  whatsapp: {
+    /** Meta WhatsApp Cloud API. Without a token the mock transport is used (dev/tests). */
+    token: process.env.WHATSAPP_TOKEN,
+    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
+    appSecret: process.env.WHATSAPP_APP_SECRET,
+    verifyToken: process.env.WHATSAPP_VERIFY_TOKEN,
+    /** The business number customers message, digits only, e.g. 60123456789. */
+    number: env('WHATSAPP_NUMBER', '60000000000'),
+    apiVersion: env('WHATSAPP_API_VERSION', 'v21.0'),
+    /** Approved template names for messages sent outside the 24 h window (optional; billed per message). */
+    digestTemplate: process.env.WHATSAPP_DIGEST_TEMPLATE,
+  },
+  /** SMTP connection URL for owner emails (weekly digest). Without it, emails are logged. */
+  smtpUrl: process.env.SMTP_URL,
+  mailFrom: env('MAIL_FROM', 'DobiMaster <no-reply@dobimaster.local>'),
 };

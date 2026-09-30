@@ -95,9 +95,9 @@ function Plans({ canManage, shopId }: { canManage: boolean; shopId: string }) {
           const plans = q.data!.plans.filter((p) => !shopId || p.shop_id === shopId);
           if (!plans.length) return <EmptyState title="No maintenance plans yet">Start with “Clean dryer lint duct every 30 days”.</EmptyState>;
           return (
-            <Card className="divide-y divide-line">
+            <Card className="divide-y divide-line" role="list" aria-label="Maintenance plans">
               {plans.map((p) => (
-                <div key={p.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                <div key={p.id} role="listitem" className="flex flex-wrap items-center gap-3 px-4 py-3">
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium">{p.title}</div>
                     <div className="text-xs text-muted">
@@ -151,8 +151,10 @@ function PlanForm({ onDone, defaultShopId }: { onDone: () => void; defaultShopId
   const badNumber = [days, cycles, runHours].some((v) => v.trim() && !/^\d+$/.test(v.trim()));
 
   return (
-    <Card className="mb-3 space-y-3 p-4">
-      <h3 className="font-semibold">New maintenance plan</h3>
+    <Card className="mb-3 space-y-3 p-4" role="region" aria-labelledby="new-plan-title">
+      <h3 id="new-plan-title" className="font-semibold">
+        New maintenance plan
+      </h3>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <span className="mb-1 block text-sm font-medium">Shop</span>

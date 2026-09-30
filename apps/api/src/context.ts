@@ -3,7 +3,9 @@ import type { FastifyBaseLogger } from 'fastify';
 import type { DB } from './db/index.js';
 import type { EventBus } from './events/bus.js';
 import type { JobQueue } from './jobs/queue.js';
-import type { PushService } from './modules/push/service.js';
+import type { Notifier } from './modules/notify/service.js';
+import type { MailTransport } from './modules/mail/service.js';
+import type { BlobStore } from './modules/attachments/storage.js';
 import type { PaymentGateway } from './modules/payments/gateway.js';
 import type { ControllerRegistry } from './modules/control/controllers.js';
 
@@ -13,7 +15,10 @@ export interface Ctx {
   pool: pg.Pool;
   bus: EventBus;
   jobs: JobQueue;
-  push: PushService;
+  /** Customer + owner notifications (web push, WhatsApp). */
+  notify: Notifier;
+  mail: MailTransport;
+  blobs: BlobStore;
   gateway: PaymentGateway;
   controllers: ControllerRegistry;
   now: () => Date;

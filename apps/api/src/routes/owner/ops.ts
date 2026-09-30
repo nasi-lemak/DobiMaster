@@ -9,11 +9,14 @@ import { audit } from '../../modules/audit/service.js';
 import { createStaffTicket, updateTicket } from '../../modules/tickets/service.js';
 import { decideRefund, requestRefund } from '../../modules/refunds/service.js';
 import { logMaintenance, maintenanceDue } from '../../modules/maintenance/service.js';
-import { todaysChecklists, toggleChecklistItem } from '../../modules/checklists/service.js';
+import { assignItemIds, todaysChecklists, toggleChecklistItem } from '../../modules/checklists/service.js';
+import { attachmentUrl } from '../../modules/attachments/service.js';
 import { reconciliation, recordCollection } from '../../modules/collections/service.js';
 import { capacityInsight, lowUsage, peakHours, revenue, utilisation, type RevenueGroup } from '../../modules/analytics/service.js';
 
 const uuid = z.string().uuid();
+/** Item ids are assigned by the server; send the existing id when editing so completions stay attached. */
+const itemSchema = z.object({ id: z.string().min(1).max(40).optional(), label: z.string().min(1).max(200), photoRequired: z.boolean().optional() });
 
 function range(q: { from?: string; to?: string; days?: number }, now: Date) {
   const to = q.to ? new Date(q.to) : now;
@@ -69,7 +72,17 @@ export async function ownerOpsRoutes(app: FastifyInstance, ctx: Ctx) {
     ]);
     // Staff without refund permission don't see the customer's phone number.
     const ticket = can(o, 'refunds.decide') ? t : { ...t, contact_phone: t.contact_phone ? '••••' + t.contact_phone.slice(-3) : null };
-    return { ticket, events, shop, machine: machine ?? null, payment: payment ?? null, refunds, cycle: cycle ?? null };
+    const photos = await ctx.db.selectFrom('attachments').select(['id', 'content_type', 'created_at']).where('ticket_id', '=', id).orderBy('created_at').execute();
+    return {
+      ticket,
+      events,
+      shop,
+      machine: machine ?? null,
+      payment: payment ?? null,
+      refunds,
+      cycle: cycle ?? null,
+      photos: photos.map((p) => ({ id: p.id, url: attachmentUrl(p.id), createdAt: p.created_at.toISOString() })),
+    };
   });
 
   app.post('/owner/tickets', async (req) => {
@@ -310,12 +323,12 @@ export async function ownerOpsRoutes(app: FastifyInstance, ctx: Ctx) {
   app.post('/owner/checklists/templates', async (req) => {
     const o = requirePerm(req, 'checklists.manage');
     const b = z
-      .object({ shopId: uuid, name: z.string().min(2).max(100), items: z.array(z.object({ id: z.string().min(1).max(40), label: z.string().min(1).max(200) })).min(1).max(40), active: z.boolean().default(true) })
+      .object({ shopId: uuid, name: z.string().min(2).max(100), items: z.array(itemSchema).min(1).max(40), active: z.boolean().default(true) })
       .parse(req.body);
     await assertShopAccess(ctx, o, b.shopId);
     const t = await ctx.db
       .insertInto('checklist_templates')
-      .values({ tenant_id: o.tenantId, shop_id: b.shopId, name: b.name, items: json(b.items), active: b.active })
+      .values({ tenant_id: o.tenantId, shop_id: b.shopId, name: b.name, items: json(assignItemIds(b.items)), active: b.active })
       .returningAll()
       .executeTakeFirstOrThrow();
     await audit(ctx, actorOf(req), 'checklist_template.create', 'checklist_template', t.id, undefined, b);
@@ -326,11 +339,11 @@ export async function ownerOpsRoutes(app: FastifyInstance, ctx: Ctx) {
     const o = requirePerm(req, 'checklists.manage');
     const { id } = z.object({ id: uuid }).parse(req.params);
     const b = z
-      .object({ name: z.string().min(2).max(100).optional(), items: z.array(z.object({ id: z.string().min(1).max(40), label: z.string().min(1).max(200) })).min(1).max(40).optional(), active: z.boolean().optional() })
+      .object({ name: z.string().min(2).max(100).optional(), items: z.array(itemSchema).min(1).max(40).optional(), active: z.boolean().optional() })
       .parse(req.body);
     const t = await ctx.db
       .updateTable('checklist_templates')
-      .set({ ...(b.name && { name: b.name }), ...(b.items && { items: json(b.items) }), ...(b.active !== undefined && { active: b.active }) })
+      .set({ ...(b.name && { name: b.name }), ...(b.items && { items: json(assignItemIds(b.items)) }), ...(b.active !== undefined && { active: b.active }) })
       .where('id', '=', id)
       .where('tenant_id', '=', o.tenantId)
       .returningAll()
@@ -349,11 +362,11 @@ export async function ownerOpsRoutes(app: FastifyInstance, ctx: Ctx) {
   app.post('/owner/checklists/runs/:runId/items/:itemId', async (req) => {
     const o = requirePerm(req, 'checklists.complete');
     const { runId, itemId } = z.object({ runId: uuid, itemId: z.string().max(40) }).parse(req.params);
-    const { done } = z.object({ done: z.boolean() }).parse(req.body);
+    const { done, photoId } = z.object({ done: z.boolean(), photoId: uuid.optional() }).parse(req.body);
     const run = await ctx.db.selectFrom('checklist_runs').select('shop_id').where('id', '=', runId).where('tenant_id', '=', o.tenantId).executeTakeFirst();
     if (!run) throw notFound('Checklist');
     await assertShopAccess(ctx, o, run.shop_id);
-    await toggleChecklistItem(ctx, o.tenantId, runId, itemId, { id: o.userId, name: o.name }, done);
+    await toggleChecklistItem(ctx, o.tenantId, runId, itemId, { id: o.userId, name: o.name }, done, photoId);
     return { ok: true };
   });
 

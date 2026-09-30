@@ -5,6 +5,9 @@ import { registerPaymentJobs } from '../modules/payments/service.js';
 import { ingestSamples, sweepDevices } from '../modules/telemetry/service.js';
 import { sweepMaintenance } from '../modules/maintenance/service.js';
 import { sweepLowUsage } from '../modules/analytics/service.js';
+import { sweepDigest } from '../modules/digest/service.js';
+import { sweepPrivacy } from '../modules/privacy/service.js';
+import { sweepUnlinkedAttachments } from '../modules/attachments/service.js';
 
 export function registerJobs(ctx: Ctx, opts: { periodic: boolean }) {
   registerCycleJobs(ctx);
@@ -13,6 +16,13 @@ export function registerJobs(ctx: Ctx, opts: { periodic: boolean }) {
   ctx.jobs.register('sweep.devices', () => sweepDevices(ctx));
   ctx.jobs.register('sweep.maintenance', () => sweepMaintenance(ctx));
   ctx.jobs.register('sweep.low_usage', () => sweepLowUsage(ctx));
+  ctx.jobs.register('sweep.digest', () => sweepDigest(ctx));
+  ctx.jobs.register('sweep.privacy', async () => {
+    await sweepPrivacy(ctx);
+  });
+  ctx.jobs.register('sweep.attachments', async () => {
+    await sweepUnlinkedAttachments(ctx);
+  });
   ctx.jobs.register('sweep.cleanup', async () => {
     const cutoff = new Date(ctx.now().getTime() - 14 * 86_400_000);
     await ctx.db.deleteFrom('jobs').where('status', 'in', ['done', 'cancelled']).where('updated_at', '<', cutoff).execute();
@@ -41,6 +51,9 @@ export function registerJobs(ctx: Ctx, opts: { periodic: boolean }) {
     ctx.jobs.every('sweep.maintenance', 3600_000);
     ctx.jobs.every('sweep.low_usage', 6 * 3600_000);
     ctx.jobs.every('sweep.cleanup', 24 * 3600_000);
+    ctx.jobs.every('sweep.digest', 3600_000);
+    ctx.jobs.every('sweep.privacy', 24 * 3600_000);
+    ctx.jobs.every('sweep.attachments', 3600_000);
     ctx.jobs.every('sim.heartbeat', 30_000);
   }
 }

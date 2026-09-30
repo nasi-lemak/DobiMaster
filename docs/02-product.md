@@ -48,6 +48,13 @@ Status sources referenced below:
 | **Device offline and heartbeat alerts**, power-cut detection | Tripped breakers and internet outages noticed within minutes |
 | **Anomaly rules**: dryer cycle with abnormally low heater current, an optional exhaust-temperature probe for LPG dryers (a clamp can't see the burner), washer stuck mid-cycle | Silent failures; "paid 40 min, it ran 26" (the short-cycle alert is already in the MVP) |
 | **"Notify me when a washer/dryer frees up"** (a notify-list, not a queue) | Waiting in the shop |
+
+*Built since the MVP (section 12 wireframes still apply):*
+- WhatsApp "notify me", using the customer-initiated free window.
+- A weekly owner summary by email and WhatsApp, also viewable at `/owner/digest`.
+- Photos on reports, and photo-required checklist items.
+- The PDPA retention sweep.
+- Server-assigned checklist item ids.
 | **WhatsApp "notify me"**: customer-initiated `wa.me` link with a pre-filled machine code, answered in the free customer-service window; paid templates only above a quota. Plus an **iOS install prompt**. | iOS web push requires Add to Home Screen. WhatsApp is Malaysia's default channel. Keeps per-message cost under control (see 04-business §13). |
 | **Optional customer accounts** (phone OTP), cross-device history, receipts | Receipts and history beyond one device |
 | **Photo attachments** on reports and checklists | Evidence for leaks, dirt, damage; proof of cleaning |

@@ -301,7 +301,7 @@ export async function autoRefund(ctx: Ctx, paymentId: string, reason: string) {
     .execute();
   if (p.customer_id) {
     const machine = await ctx.db.selectFrom('machines').select('code').where('id', '=', p.machine_id).executeTakeFirstOrThrow();
-    await ctx.push.toCustomer(p.customer_id, 'payment_start_failed', { machine: machine.code, amount: formatRM(p.amount_sen) }, { url: `/pay/${p.id}` });
+    await ctx.notify.toCustomer(p.customer_id, 'payment_start_failed', { machine: machine.code, amount: formatRM(p.amount_sen) }, { url: `/pay/${p.id}` });
   }
   await ctx.jobs.schedule('refund.process', ctx.now(), { refundId: refund.id }, `refund.process:${refund.id}`);
   await publishPayment(ctx, p.id);

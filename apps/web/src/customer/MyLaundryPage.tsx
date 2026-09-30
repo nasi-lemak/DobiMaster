@@ -9,6 +9,7 @@ import { useChannels } from '../lib/realtime';
 import { Button, Card, EmptyState, PageLoader, Pill } from '../components/ui';
 import { useMyCycles } from './Layout';
 import { NotificationNotice } from './MachinePage';
+import { WhatsAppCard } from './WhatsAppCard';
 import { useNow } from './useNow';
 import type { MyCycle } from './types';
 
@@ -133,6 +134,9 @@ export function MyLaundryPage() {
               <NotificationNotice />
             </div>
           )}
+          <div className="mt-4 border-t border-line pt-4">
+            <WhatsAppCard cycleId={active.find((c) => c.status === 'running')?.id} />
+          </div>
         </Card>
       )}
 

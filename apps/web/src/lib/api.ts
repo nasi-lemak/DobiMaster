@@ -60,6 +60,16 @@ export async function request<T>(method: string, path: string, body?: unknown, o
   return data as T;
 }
 
+/** Upload a prepared photo as the raw request body (see lib/image.ts). */
+export async function uploadPhoto(path: string, blob: Blob, opts: { guest?: boolean } = {}): Promise<{ attachment: { id: string; url?: string } }> {
+  const headers: Record<string, string> = { 'content-type': blob.type || 'image/jpeg' };
+  if (opts.guest) headers.authorization = `Bearer ${await ensureGuest()}`;
+  const res = await fetch(`/api/v1${path}`, { method: 'POST', headers, body: blob, credentials: 'same-origin' });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new ApiError(res.status, data?.error ?? 'error', data?.message ?? res.statusText);
+  return data;
+}
+
 export const api = {
   get: <T>(path: string, opts?: { guest?: boolean }) => request<T>('GET', path, undefined, opts),
   post: <T>(path: string, body?: unknown, opts?: { guest?: boolean; headers?: Record<string, string> }) => request<T>('POST', path, body ?? {}, opts),

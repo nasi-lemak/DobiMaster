@@ -45,7 +45,7 @@ export function AnnouncementsPage() {
                 ) : (
                   <div className="space-y-3">
                     {live.map((a) => (
-                      <Card key={a.id} className="p-4">
+                      <Card key={a.id} className="p-4" role="article" aria-label={`${shopName(a.shop_id)}: ${a.message.en}`}>
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div className="flex items-center gap-2">
                             {a.level === 'warning' ? <StatusTag tone="warning">Warning</StatusTag> : <StatusTag tone="info">Info</StatusTag>}
@@ -117,8 +117,10 @@ function NewAnnouncement({ onDone }: { onDone: () => void }) {
     () => onDone(),
   );
   return (
-    <Card className="mb-6 space-y-3 p-4">
-      <h2 className="font-semibold">New announcement</h2>
+    <Card className="mb-6 space-y-3 p-4" role="region" aria-labelledby="new-announcement-title">
+      <h2 id="new-announcement-title" className="font-semibold">
+        New announcement
+      </h2>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <span className="mb-1 block text-sm font-medium">Shop</span>

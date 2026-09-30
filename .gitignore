@@ -4,3 +4,7 @@ dist
 *.log
 coverage
 .DS_Store
+data/
+test-results/
+playwright-report/
+apps/web/e2e/.auth/

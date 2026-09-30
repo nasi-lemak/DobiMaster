@@ -107,8 +107,10 @@ function RegisterForm({ onCancel, onDone }: { onCancel: () => void; onDone: (r: 
     (r) => onDone(r),
   );
   return (
-    <Card className="mb-6 space-y-3 p-4">
-      <h2 className="font-semibold">Register a sensor</h2>
+    <Card className="mb-6 space-y-3 p-4" role="region" aria-labelledby="register-sensor-title">
+      <h2 id="register-sensor-title" className="font-semibold">
+        Register a sensor
+      </h2>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <span className="mb-1 block text-sm font-medium">Shop</span>

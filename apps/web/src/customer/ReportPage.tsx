@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { MONEY_CATEGORIES, TICKET_CATEGORIES, type TicketCategory } from '@dobi/shared';
-import { api, ApiError, uuid } from '../lib/api';
+import { api, ApiError, uploadPhoto, uuid } from '../lib/api';
+import { preparePhoto } from '../lib/image';
 import { useI18n } from '../lib/i18n';
 import { Button, Card, Field, inputClass, cx } from '../components/ui';
 import type { MachineResponse } from './types';
@@ -33,6 +34,23 @@ export function ReportPage() {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ ref: string } | null>(null);
   const [reportId] = useState(() => uuid()); // idempotent: resubmitting after a network error never duplicates
+  const [photos, setPhotos] = useState<Array<{ id: string; preview: string }>>([]);
+  const [uploading, setUploading] = useState(false);
+
+  async function addPhoto(file: File | undefined) {
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const blob = await preparePhoto(file);
+      const res = await uploadPhoto('/public/uploads', blob, { guest: true });
+      setPhotos((p) => [...p, { id: res.attachment.id, preview: URL.createObjectURL(blob) }]);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t('photo.error'));
+    } finally {
+      setUploading(false);
+    }
+  }
 
   const categories = TICKET_CATEGORIES.filter((c) => (qr ? true : !MACHINE_ONLY.includes(c)));
   const m = machine.data?.machine;
@@ -54,6 +72,7 @@ export function ReportPage() {
           details: details.trim() || null,
           amountClaimedSen: money && amount ? Math.round(Number(amount) * 100) : null,
           contactPhone: money && phone.trim() ? phone.trim() : null,
+          attachmentIds: photos.map((p) => p.id),
         },
         { guest: true },
       );
@@ -111,6 +130,42 @@ export function ReportPage() {
           <Field label={t('details')}>
             <textarea className={inputClass} rows={3} maxLength={2000} placeholder={t('detailsPh')} value={details} onChange={(e) => setDetails(e.target.value)} />
           </Field>
+          <div>
+            <span className="mb-1 block text-sm font-medium">{t('photo.label')}</span>
+            <div className="flex flex-wrap gap-2">
+              {photos.map((p) => (
+                <div key={p.id} className="relative">
+                  <img src={p.preview} alt="" className="h-20 w-20 rounded-xl object-cover" />
+                  <button
+                    type="button"
+                    aria-label={t('photo.remove')}
+                    onClick={() => setPhotos((ps) => ps.filter((x) => x.id !== p.id))}
+                    className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-ink text-xs text-bg"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              {photos.length < 3 && (
+                <label className={cx('flex h-20 w-20 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-line text-xs text-muted', uploading && 'opacity-50')}>
+                  <span aria-hidden className="text-xl">📷</span>
+                  {uploading ? t('sending') : t('photo.add')}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="sr-only"
+                    disabled={uploading}
+                    onChange={(e) => {
+                      void addPhoto(e.target.files?.[0]);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+            <span className="mt-1 block text-xs text-muted">{t('photo.hint')}</span>
+          </div>
           {money && (
             <>
               <Field label={t('amountLost')}>
@@ -122,7 +177,7 @@ export function ReportPage() {
             </>
           )}
           {error && <p className="text-sm text-critical-ink">{error}</p>}
-          <Button block size="lg" disabled={busy} onClick={submit}>
+          <Button block size="lg" disabled={busy || uploading} onClick={submit}>
             {busy ? t('sending') : t('send')}
           </Button>
         </Card>

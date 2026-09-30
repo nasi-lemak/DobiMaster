@@ -37,10 +37,13 @@ export function PageHeader({ title, subtitle, back, actions }: { title: ReactNod
 }
 
 export function Section({ title, action, children, className, id }: { title: ReactNode; action?: ReactNode; children: ReactNode; className?: string; id?: string }) {
+  // Always label the section by its heading so it is a named landmark (screen readers, e2e locators).
+  const autoId = useId();
+  const headingId = id ?? autoId;
   return (
-    <section className={cx('mt-6', className)} aria-labelledby={id}>
+    <section className={cx('mt-6', className)} aria-labelledby={headingId}>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 id={id} className="text-base font-semibold">
+        <h2 id={headingId} className="text-base font-semibold">
           {title}
         </h2>
         {action}

@@ -62,8 +62,10 @@ export function MachinesPage() {
       )}
 
       {adding && (
-        <Card className="mb-6 p-4 sm:p-6">
-          <h2 className="mb-4 text-lg font-semibold">Add machines</h2>
+        <Card className="mb-6 p-4 sm:p-6" role="region" aria-labelledby="add-machines-title">
+          <h2 id="add-machines-title" className="mb-4 text-lg font-semibold">
+            Add machines
+          </h2>
           <MachineForm key={shopId} mode="add" defaultShopId={shopId} onSubmit={(b) => add.mutate(b)} pending={add.isPending} error={add.error} onCancel={() => setAdding(false)} />
         </Card>
       )}

@@ -37,9 +37,9 @@ export function StaffPage() {
           q.data!.staff.length === 0 ? (
             <EmptyState title="No team members" />
           ) : (
-            <Card className="divide-y divide-line">
+            <Card className="divide-y divide-line" role="list" aria-label="Team">
               {q.data!.staff.map((s) => (
-                <div key={s.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                <div key={s.id} role="listitem" className="flex flex-wrap items-center gap-3 px-4 py-3">
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium">{s.name}</div>
                     <div className="text-xs text-muted">{s.email}</div>
@@ -76,8 +76,10 @@ function AddStaff({ onDone }: { onDone: () => void }) {
   const roles = ROLES.filter((r) => r !== 'owner' || me.role === 'owner');
   const valid = name.trim() && email.includes('@') && password.length >= 8 && (allShops || shopIds.length > 0);
   return (
-    <Card className="mb-6 space-y-3 p-4">
-      <h2 className="font-semibold">Add a team member</h2>
+    <Card className="mb-6 space-y-3 p-4" role="region" aria-labelledby="add-staff-title">
+      <h2 id="add-staff-title" className="font-semibold">
+        Add a team member
+      </h2>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Name">
           <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />

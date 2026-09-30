@@ -84,8 +84,10 @@ function RecordForm({ defaultShopId, onDone, onCancel }: { defaultShopId: string
   const set = (id: string, patch: Partial<{ amount: string; counter: string }>) => setLines((ls) => ({ ...ls, [id]: { amount: '', counter: '', ...ls[id], ...patch } }));
 
   return (
-    <Card className="mb-6 p-4 sm:p-5">
-      <h2 className="mb-3 text-lg font-semibold">Record collection</h2>
+    <Card className="mb-6 p-4 sm:p-5" role="region" aria-labelledby="record-collection-title">
+      <h2 id="record-collection-title" className="mb-3 text-lg font-semibold">
+        Record collection
+      </h2>
       <div className="grid gap-3 sm:grid-cols-3">
         <div>
           <span className="mb-1 block text-sm font-medium">Shop</span>

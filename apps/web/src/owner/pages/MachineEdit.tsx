@@ -11,7 +11,10 @@ export function MachineEditPage() {
   const navigate = useNavigate();
   const q = useApi<MachineDetail>(k.machine(id), `/owner/machines/${id}`);
   const save = useApiMutation((b: MachinePayload) => api.patch(`/owner/machines/${id}`, b), [['owner']], () => navigate(`/owner/machines/${id}`));
-  const del = useApiMutation(() => api.del(`/owner/machines/${id}`), [['owner']], () => navigate('/owner/machines'));
+  // Return to the list of the machine's own shop (the list otherwise defaults to the first shop, hiding the result).
+  const del = useApiMutation(() => api.del(`/owner/machines/${id}`), [['owner']], () =>
+    navigate(q.data ? `/owner/machines?shop=${q.data.machine.shopId}` : '/owner/machines'),
+  );
 
   return (
     <QueryState q={q}>

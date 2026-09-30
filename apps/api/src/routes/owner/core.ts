@@ -39,7 +39,16 @@ export async function ownerCoreRoutes(app: FastifyInstance, ctx: Ctx) {
     const shops = shopIds.length
       ? await ctx.db.selectFrom('shops').select(['id', 'name', 'slug']).where('id', 'in', shopIds).orderBy('name').execute()
       : [];
-    return { user: { id: o.userId, name: o.name, email: o.email }, role: o.role, permissions: o.permissions, tenant, shops };
+    const prefs = await ctx.db.selectFrom('users').select('digest_opt_out').where('id', '=', o.userId).executeTakeFirstOrThrow();
+    const wa = await ctx.notify.whatsapp.contactFor({ userId: o.userId });
+    return {
+      user: { id: o.userId, name: o.name, email: o.email },
+      role: o.role,
+      permissions: o.permissions,
+      tenant,
+      shops,
+      preferences: { digestOptOut: prefs.digest_opt_out, whatsappLinked: !!wa && !wa.opted_out, whatsappMode: ctx.notify.whatsapp.mode },
+    };
   });
 
   app.get('/owner/overview', async (req) => {

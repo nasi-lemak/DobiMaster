@@ -29,6 +29,7 @@ export const SECONDARY_NAV: NavItem[] = [
   { to: '/owner/collections', label: 'Collections', icon: 'cash', anyOf: ['collections.create', 'revenue.view'], hint: 'Record cash, reconcile' },
   { to: '/owner/maintenance', label: 'Maintenance', icon: 'wrench', hint: 'Due list and plans' },
   { to: '/owner/checklists', label: 'Checklists', icon: 'checklist', hint: "Today's cleaning runs" },
+  { to: '/owner/digest', label: 'Weekly summary', icon: 'log', hint: 'Last week at a glance · email & WhatsApp' },
   { to: '/owner/alerts', label: 'Alerts', icon: 'bell', hint: 'Repeat faults, sensors, low usage' },
   { to: '/owner/announcements', label: 'Announcements', icon: 'megaphone', hint: 'Shown on the shop page' },
   { to: '/owner/devices', label: 'Sensors', icon: 'sensor', hint: 'Power monitors per machine' },

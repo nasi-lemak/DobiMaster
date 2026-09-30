@@ -43,6 +43,7 @@ export interface UsersTable {
   email: string;
   name: string;
   password_hash: string;
+  digest_opt_out: Generated<boolean>;
   created_at: Timestamp;
 }
 
@@ -320,11 +321,14 @@ export interface MaintenanceLogsTable {
 export interface ChecklistItem {
   id: string;
   label: string;
+  /** Staff must attach a photo to tick this item (proof of cleaning). */
+  photoRequired?: boolean;
 }
 export interface ChecklistCompletion {
   by: string;
   byName: string;
   at: string;
+  photoId?: string;
 }
 
 export interface ChecklistTemplatesTable {
@@ -400,6 +404,63 @@ export interface JobsTable {
   updated_at: Timestamp;
 }
 
+export interface WaContactsTable {
+  id: Generated<string>;
+  wa_id: string;
+  customer_id: string | null;
+  user_id: string | null;
+  locale: Generated<string>;
+  last_inbound_at: TimestampReq;
+  opted_out: Generated<boolean>;
+  created_at: Timestamp;
+}
+
+export interface WaLinkCodesTable {
+  code: string;
+  customer_id: string | null;
+  user_id: string | null;
+  cycle_id: string | null;
+  locale: Generated<string>;
+  expires_at: TimestampReq;
+  used_at: TimestampNull;
+  created_at: Timestamp;
+}
+
+export interface WaMessagesTable {
+  id: Generated<string>;
+  direction: 'in' | 'out';
+  wa_id: string;
+  kind: string;
+  template: string | null;
+  body: string | null;
+  provider_message_id: string | null;
+  error: string | null;
+  created_at: Timestamp;
+}
+
+export interface AttachmentsTable {
+  id: Generated<string>;
+  tenant_id: string | null;
+  uploader_customer_id: string | null;
+  uploader_user_id: string | null;
+  content_type: string;
+  size_bytes: number;
+  sha256: string;
+  storage_key: string;
+  ticket_id: string | null;
+  checklist_run_id: string | null;
+  checklist_item_id: string | null;
+  linked_at: TimestampNull;
+  created_at: Timestamp;
+}
+
+export interface DigestLogTable {
+  tenant_id: string;
+  week_start: ColumnType<string, string, string>;
+  sent_at: Timestamp;
+  recipients: Generated<number>;
+}
+
 export interface AppSettingsTable {
   key: string;
   value: Json<unknown>;
@@ -433,6 +494,11 @@ export interface Database {
   audit_log: AuditLogTable;
   jobs: JobsTable;
   app_settings: AppSettingsTable;
+  wa_contacts: WaContactsTable;
+  wa_link_codes: WaLinkCodesTable;
+  wa_messages: WaMessagesTable;
+  attachments: AttachmentsTable;
+  digest_log: DigestLogTable;
 }
 
 export type Shop = Selectable<ShopsTable>;

@@ -11,6 +11,9 @@ import { MockGateway } from '../src/modules/payments/gateway.js';
 import { recomputeMachineState } from '../src/modules/machines/state.js';
 import { initialDetectorState } from '../src/modules/telemetry/detector.js';
 import { clearBusynessCache } from '../src/modules/public/service.js';
+import { MockWhatsAppTransport } from '../src/modules/whatsapp/service.js';
+import { MemoryMailTransport } from '../src/modules/mail/service.js';
+import { MemoryBlobStore } from '../src/modules/attachments/storage.js';
 
 const H24 = Object.fromEntries(['1', '2', '3', '4', '5', '6', '7'].map((d) => [d, { open: '00:00', close: '24:00' }]));
 
@@ -19,6 +22,9 @@ export interface Harness {
   ctx: Ctx;
   push: MemoryPushTransport;
   gateway: MockGateway;
+  whatsapp: MockWhatsAppTransport;
+  mail: MemoryMailTransport;
+  blobs: MemoryBlobStore;
   clock: { now: Date; advance(min: number): void };
   /** Advance the clock and run every job that became due. */
   tick(min: number): Promise<void>;
@@ -28,7 +34,7 @@ export interface Harness {
 export async function createHarness(): Promise<Harness> {
   const pool = createPool(process.env.DATABASE_URL);
   await migrate(pool, () => {});
-  await pool.query(`TRUNCATE tenants, users, customers, jobs, app_settings, audit_log RESTART IDENTITY CASCADE`);
+  await pool.query(`TRUNCATE tenants, users, customers, jobs, app_settings, audit_log, wa_contacts, wa_link_codes, wa_messages, attachments RESTART IDENTITY CASCADE`);
   clearBusynessCache();
   const clock = {
     now: new Date('2026-09-30T02:00:00Z'), // 10:00 in Kuala Lumpur
@@ -38,12 +44,18 @@ export async function createHarness(): Promise<Harness> {
   };
   const push = new MemoryPushTransport();
   const gateway = new MockGateway();
-  const { app, ctx } = await buildApp({ pool, now: () => clock.now, pushTransport: push, gateway, logger: false });
+  const whatsapp = new MockWhatsAppTransport();
+  const mail = new MemoryMailTransport();
+  const blobs = new MemoryBlobStore();
+  const { app, ctx } = await buildApp({ pool, now: () => clock.now, pushTransport: push, gateway, whatsappTransport: whatsapp, mail, blobs, logger: false });
   return {
     app,
     ctx,
     push,
     gateway,
+    whatsapp,
+    mail,
+    blobs,
     clock,
     async tick(min: number) {
       clock.advance(min);
@@ -66,7 +78,7 @@ export interface Fixture {
   washer: { id: string; qr: string };
   sensored: { id: string; qr: string; deviceId: string; token: string };
   paid: { id: string; qr: string; deviceId: string; token: string };
-  users: { owner: string; staff: string };
+  users: { owner: string; staff: string; ownerId: string; staffId: string };
 }
 
 const programs = [
@@ -131,7 +143,7 @@ export async function seedFixture(h: Harness): Promise<Fixture> {
     washer,
     sensored: { ...sensored, deviceId: d1.id, token: d1.token },
     paid: { ...paid, deviceId: d2.id, token: d2.token },
-    users: { owner: owner.email, staff: staff.email },
+    users: { owner: owner.email, staff: staff.email, ownerId: owner.id, staffId: staff.id },
   };
 }
 

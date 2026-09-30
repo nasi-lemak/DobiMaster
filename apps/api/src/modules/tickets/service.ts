@@ -7,6 +7,7 @@ import { conflict, notFound } from '../../lib/errors.js';
 import { raiseAlert } from '../alerts/service.js';
 import { recomputeMachineState } from '../machines/state.js';
 import { machineEvidence } from '../telemetry/service.js';
+import { linkToTicket } from '../attachments/service.js';
 
 export const CATEGORY_TITLES: Record<TicketCategory, string> = {
   not_starting: 'Machine not starting',
@@ -47,6 +48,8 @@ export interface CustomerReportInput {
   details?: string | null;
   amountClaimedSen?: number | null;
   contactPhone?: string | null;
+  /** Photos uploaded by this customer via /public/uploads. */
+  attachmentIds?: string[];
 }
 
 export async function createCustomerReport(ctx: Ctx, input: CustomerReportInput): Promise<Ticket> {
@@ -126,6 +129,8 @@ export async function createCustomerReport(ctx: Ctx, input: CustomerReportInput)
     await trx.insertInto('ticket_events').values({ ticket_id: t.id, kind: 'created', body: t.details, created_at: now }).execute();
     return t;
   });
+
+  if (input.attachmentIds?.length) await linkToTicket(ctx, input.attachmentIds, ticket, input.customerId);
 
   // Attach sensor evidence at the moment of the report — settles "did it run?" disputes objectively.
   if (machine) {
@@ -233,7 +238,7 @@ async function afterTicketChange(ctx: Ctx, ticket: Ticket, notifyOwner: boolean)
   });
   if (notifyOwner && ticket.severity !== 'low') {
     const shop = await ctx.db.selectFrom('shops').select('name').where('id', '=', ticket.shop_id).executeTakeFirstOrThrow();
-    await ctx.push.toTenant(
+    await ctx.notify.toTenant(
       ticket.tenant_id,
       { title: `New report · ${shop.name}`, body: ticket.title, url: `/owner/tickets/${ticket.id}`, tag: `ticket-${ticket.id}` },
       ticket.shop_id,
