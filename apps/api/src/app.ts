@@ -24,6 +24,7 @@ import { whatsappRoutes } from './routes/whatsapp.js';
 import { registerWatchHandlers } from './modules/watches/service.js';
 import { attachmentRoutes } from './routes/attachments.js';
 import { ownerDigestRoutes } from './routes/owner/digest.js';
+import { onboardingRoutes } from './routes/owner/onboarding.js';
 import { createGateway, type PaymentGateway } from './modules/payments/gateway.js';
 import { defaultControllers, type ControllerRegistry } from './modules/control/controllers.js';
 import { publicRoutes, webhookRoutes } from './routes/public.js';
@@ -114,6 +115,7 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
       await ownerShopRoutes(api, ctx);
       await ownerOpsRoutes(api, ctx);
       await ownerDigestRoutes(api, ctx);
+      await onboardingRoutes(api, ctx);
       await api.register(async (scoped) => attachmentRoutes(scoped, ctx));
       await api.register(async (scoped) => whatsappRoutes(scoped, ctx));
       await api.register(async (hooks) => webhookRoutes(hooks, ctx));

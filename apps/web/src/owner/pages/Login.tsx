@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api';
 import { Button, Field, inputClass } from '../../components/ui';
@@ -88,6 +89,12 @@ export function LoginPage() {
           </button>
         </form>
         )}
+        <p className="mt-4 text-center text-sm">
+          New laundromat?{' '}
+          <Link to="/owner/signup" className="font-medium text-brand">
+            Create an account
+          </Link>
+        </p>
         <div className="mt-4 rounded-2xl bg-surface-2 p-3 text-xs text-ink-2">
           <p className="font-medium">Demo accounts (password demo1234)</p>
           <ul className="mt-1 space-y-0.5">

@@ -1,4 +1,4 @@
-import { Link } from 'react-router';
+import { Link, Navigate } from 'react-router';
 import { Card, EmptyState } from '../../components/ui';
 import { ago, pct, rm0 } from '../../lib/format';
 import { PageHeader, QueryState, Section, SeverityTag, StatTile, StatusTag } from '../components/common';
@@ -12,6 +12,7 @@ export function OverviewPage() {
   const me = useMe();
   const can = useCan();
   const q = useApi<Overview>(k.overview, '/owner/overview', { refetchInterval: 30_000 });
+  const setup = useApi<{ steps: Record<string, boolean>; complete: boolean }>(k.onboarding, '/owner/onboarding', { enabled: can('shops.manage') });
   const today = new Date().toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'short' });
 
   return (
@@ -20,9 +21,13 @@ export function OverviewPage() {
       <QueryState q={q}>
         {() => {
           const d = q.data!;
-          if (!d.totals) return <EmptyState title="No branches yet">Add a shop to get started.</EmptyState>;
+          if (!d.totals) {
+            if (can('shops.manage')) return <Navigate to="/owner/setup" replace />;
+            return <EmptyState title="No branches yet">Ask the owner to add a shop.</EmptyState>;
+          }
           return (
             <>
+              {setup.data && !setup.data.complete && <SetupBanner done={Object.values(setup.data.steps).filter(Boolean).length} />}
               <Totals d={d} showRevenue={can('revenue.view')} />
               <Attention items={d.attention} />
               <Section title="Branches">
@@ -37,6 +42,19 @@ export function OverviewPage() {
         }}
       </QueryState>
     </>
+  );
+}
+
+function SetupBanner({ done }: { done: number }) {
+  return (
+    <Link to="/owner/setup" className="flex items-center gap-3 rounded-2xl border border-brand bg-brand-soft p-4 hover:opacity-90">
+      <Icon name="checklist" className="h-5 w-5 shrink-0 text-brand" />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold">Finish setting up ({done} of 4)</p>
+        <p className="text-xs text-ink-2">Your shop is hidden from customers until you go live.</p>
+      </div>
+      <Icon name="chevron" className="h-4 w-4 text-muted" />
+    </Link>
   );
 }
 

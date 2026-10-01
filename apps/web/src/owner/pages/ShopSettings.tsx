@@ -11,8 +11,8 @@ import { useMe } from '../lib/session';
 import type { ShopLive, ShopRow } from '../lib/types';
 
 const DAYS = ['1', '2', '3', '4', '5', '6', '7'] as const;
-const TIMES = Array.from({ length: 49 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`);
-const FACILITIES: Array<{ key: string; label: string }> = [
+export const TIMES = Array.from({ length: 49 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`);
+export const FACILITIES: Array<{ key: string; label: string }> = [
   { key: 'detergentVending', label: 'Detergent vending' },
   { key: 'changeMachine', label: 'Change machine' },
   { key: 'qrPayment', label: 'QR payment' },

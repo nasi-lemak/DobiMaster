@@ -31,6 +31,8 @@ import { AuditPage } from './pages/Audit';
 import { DigestPage } from './pages/Digest';
 import { SecurityPage } from './pages/Security';
 import { ResetPasswordPage } from './pages/ResetPassword';
+import { SignupPage } from './pages/Signup';
+import { SetupPage } from './pages/Setup';
 import { Guard } from './components/Guard';
 
 /** GET /owner/me; a 401 resolves to null (= signed out) instead of an error. */
@@ -66,7 +68,7 @@ export function OwnerApp() {
         <ErrorBox message={errorMessage(session.error)} onRetry={() => session.refetch()} />
       </div>
     );
-  if (!session.data) return <LoginPage />;
+  if (!session.data) return pathname === '/owner/signup' ? <SignupPage /> : <LoginPage />;
 
   return (
     <MeProvider me={session.data}>
@@ -75,6 +77,7 @@ export function OwnerApp() {
         <Route path="shops/:id/qr-sheet" element={<QrSheetPage />} />
         <Route element={<OwnerLayout />}>
           <Route index element={<OverviewPage />} />
+          <Route path="setup" element={<SetupPage />} />
           <Route path="shops/:id" element={<ShopLivePage />} />
           <Route path="machines" element={<MachinesPage />} />
           <Route path="machines/:id" element={<MachineDetailPage />} />

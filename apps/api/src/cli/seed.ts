@@ -8,7 +8,7 @@
  *   pnpm --filter @dobi/api seed           (wipes and re-creates demo data)
  */
 import { randomUUID } from 'node:crypto';
-import type { OpeningHours, Program } from '@dobi/shared';
+import { DRYER_INSTRUCTIONS, HOURS_24, dryerPrograms, recommendedLoad, sameHoursEveryDay, washerInstructions, washerPrograms, type OpeningHours, type Program } from '@dobi/shared';
 import { buildApp } from '../app.js';
 import { createPool, json } from '../db/index.js';
 import { migrate } from '../db/migrate.js';
@@ -27,38 +27,9 @@ let seed = 42;
 const rand = () => ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296);
 const pick = <T,>(xs: T[]) => xs[Math.floor(rand() * xs.length)]!;
 
-const H24: OpeningHours = { '1': { open: '00:00', close: '24:00' }, '2': { open: '00:00', close: '24:00' }, '3': { open: '00:00', close: '24:00' }, '4': { open: '00:00', close: '24:00' }, '5': { open: '00:00', close: '24:00' }, '6': { open: '00:00', close: '24:00' }, '7': { open: '00:00', close: '24:00' } };
-const DAYTIME: OpeningHours = { '1': { open: '07:00', close: '24:00' }, '2': { open: '07:00', close: '24:00' }, '3': { open: '07:00', close: '24:00' }, '4': { open: '07:00', close: '24:00' }, '5': { open: '07:00', close: '24:00' }, '6': { open: '07:00', close: '24:00' }, '7': { open: '07:00', close: '24:00' } };
-
-const washerPrograms = (base: number, step = 100, dur = [30, 35, 40]): Program[] => [
-  { id: 'cold', name: { en: 'Cold', ms: 'Sejuk', zh: '冷水' }, durationMin: dur[0]!, priceSen: base },
-  { id: 'warm', name: { en: 'Warm', ms: 'Suam', zh: '温水' }, durationMin: dur[1]!, priceSen: base + step },
-  { id: 'hot', name: { en: 'Hot', ms: 'Panas', zh: '热水' }, durationMin: dur[2]!, priceSen: base + 2 * step },
-];
-const dryerPrograms: Program[] = [
-  { id: 'd24', name: { en: '24 min', ms: '24 minit', zh: '24 分钟' }, durationMin: 24, priceSen: 400 },
-  { id: 'd32', name: { en: '32 min', ms: '32 minit', zh: '32 分钟' }, durationMin: 32, priceSen: 500 },
-  { id: 'd40', name: { en: '40 min', ms: '40 minit', zh: '40 分钟' }, durationMin: 40, priceSen: 600 },
-];
-
-const washerInstructions = {
-  en: '1. Load clothes and close the door firmly.\n2. Insert coins or pay by QR.\n3. Choose Cold / Warm / Hot and press START.\nDo not add your own detergent — it is dosed automatically.',
-  ms: '1. Masukkan pakaian dan tutup pintu dengan kemas.\n2. Masukkan syiling atau bayar dengan QR.\n3. Pilih Sejuk / Suam / Panas dan tekan START.\nJangan tambah sabun sendiri — sabun dimasukkan secara automatik.',
-  zh: '1. 放入衣物并关紧机门。\n2. 投币或扫码付款。\n3. 选择冷水 / 温水 / 热水，按 START。\n请勿自行添加洗衣液——机器会自动投放。',
-};
-const dryerInstructions = {
-  en: '1. Clean the lint filter if it looks full.\n2. Load clothes (no more than ¾ full for faster drying).\n3. Insert coins, choose the time and press START. Add time anytime.',
-  ms: '1. Bersihkan penapis habuk jika penuh.\n2. Masukkan pakaian (tidak melebihi ¾ penuh supaya cepat kering).\n3. Masukkan syiling, pilih masa dan tekan START. Boleh tambah masa bila-bila.',
-  zh: '1. 如滤网满了请先清理。\n2. 放入衣物（不超过四分之三，干得更快）。\n3. 投币，选择时间，按 START。可随时加时。',
-};
-const loadText = (kg: number, type: 'washer' | 'dryer') =>
-  type === 'dryer'
-    ? { en: `Up to ${kg} kg dry weight — about ${Math.round(kg / 7)} washer loads`, ms: `Sehingga ${kg} kg — kira-kira ${Math.round(kg / 7)} muatan mesin basuh`, zh: `最多 ${kg} 公斤（约 ${Math.round(kg / 7)} 桶洗衣量）` }
-    : kg >= 18
-      ? { en: `${kg} kg — fits a king comforter or 3 full baskets`, ms: `${kg} kg — muat selimut king atau 3 bakul penuh`, zh: `${kg} 公斤——可洗特大被子或 3 满篮衣物` }
-      : kg >= 14
-        ? { en: `${kg} kg — a queen comforter or 2 full baskets`, ms: `${kg} kg — selimut queen atau 2 bakul penuh`, zh: `${kg} 公斤——双人被或 2 满篮衣物` }
-        : { en: `${kg} kg — about 1 full basket (a week of clothes for 2)`, ms: `${kg} kg — kira-kira 1 bakul penuh`, zh: `${kg} 公斤——约 1 满篮衣物` };
+const H24 = HOURS_24;
+const DAYTIME = sameHoursEveryDay('07:00', '24:00');
+const loadText = recommendedLoad;
 
 interface MachineSpec {
   code: string;
@@ -107,7 +78,7 @@ const shops: ShopSpec[] = [
       { code: 'W5', type: 'washer', kg: 15, programs: washerPrograms(700), sensor: 'simulator' },
       { code: 'W6', type: 'washer', kg: 15, programs: washerPrograms(700), sensor: 'simulator' },
       { code: 'W7', type: 'washer', kg: 20, programs: washerPrograms(1000, 200, [40, 45, 50]), sensor: 'simulator', popularity: 2.6 },
-      ...[1, 2, 3, 4, 5, 6].map((n) => ({ code: `D${n}`, type: 'dryer' as const, kg: 15, programs: dryerPrograms, sensor: 'simulator' as const, popularity: n === 3 ? 0.5 : 1.1 })),
+      ...[1, 2, 3, 4, 5, 6].map((n) => ({ code: `D${n}`, type: 'dryer' as const, kg: 15, programs: dryerPrograms(), sensor: 'simulator' as const, popularity: n === 3 ? 0.5 : 1.1 })),
     ],
   },
   {
@@ -127,7 +98,7 @@ const shops: ShopSpec[] = [
       { code: 'W3', type: 'washer', kg: 10, programs: washerPrograms(500) },
       { code: 'W4', type: 'washer', kg: 10, programs: washerPrograms(500) },
       { code: 'W5', type: 'washer', kg: 18, programs: washerPrograms(1000, 200, [40, 45, 50]), popularity: 1.4 },
-      ...[1, 2, 3, 4].map((n) => ({ code: `D${n}`, type: 'dryer' as const, kg: 15, programs: dryerPrograms })),
+      ...[1, 2, 3, 4].map((n) => ({ code: `D${n}`, type: 'dryer' as const, kg: 15, programs: dryerPrograms() })),
     ],
   },
   {
@@ -147,10 +118,10 @@ const shops: ShopSpec[] = [
       { code: 'W3', type: 'washer', kg: 12, programs: washerPrograms(600) },
       { code: 'W4', type: 'washer', kg: 12, programs: washerPrograms(600), quirk: 'jammed_2d' },
       { code: 'W5', type: 'washer', kg: 25, programs: washerPrograms(1400, 200, [45, 50, 55]) },
-      { code: 'D1', type: 'dryer', kg: 15, programs: dryerPrograms, sensor: 'shelly' },
-      { code: 'D2', type: 'dryer', kg: 15, programs: dryerPrograms, sensor: 'shelly_offline' },
-      { code: 'D3', type: 'dryer', kg: 15, programs: dryerPrograms },
-      { code: 'D4', type: 'dryer', kg: 15, programs: dryerPrograms },
+      { code: 'D1', type: 'dryer', kg: 15, programs: dryerPrograms(), sensor: 'shelly' },
+      { code: 'D2', type: 'dryer', kg: 15, programs: dryerPrograms(), sensor: 'shelly_offline' },
+      { code: 'D3', type: 'dryer', kg: 15, programs: dryerPrograms() },
+      { code: 'D4', type: 'dryer', kg: 15, programs: dryerPrograms() },
     ],
   },
 ];
@@ -274,7 +245,7 @@ async function main() {
           capacity_kg: ms.kg,
           brand: ms.type === 'washer' ? pick(['Speed Queen', 'Electrolux', 'Primus']) : pick(['Speed Queen', 'Electrolux']),
           programs: json(ms.programs),
-          instructions: json(ms.type === 'washer' ? washerInstructions : dryerInstructions),
+          instructions: json(ms.type === 'washer' ? washerInstructions(true) : DRYER_INSTRUCTIONS),
           recommended_load: json(loadText(ms.kg, ms.type)),
           detergent_auto: ms.type === 'washer',
           softener_auto: ms.type === 'washer' && spec.slug !== 'dobi-ceria-kepong',

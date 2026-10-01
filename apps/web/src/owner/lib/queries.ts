@@ -5,6 +5,7 @@ import { api, ApiError } from '../../lib/api';
 export const k = {
   me: ['owner', 'me'] as const,
   overview: ['owner', 'overview'] as const,
+  onboarding: ['owner', 'onboarding'] as const,
   shops: ['owner', 'shops'] as const,
   shop: (id: string) => ['owner', 'shop', id] as const,
   machines: (shopId?: string) => ['owner', 'machines', shopId ?? 'all'] as const,

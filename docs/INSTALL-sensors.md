@@ -5,6 +5,34 @@ This is a checklist for the owner and the installer (a registered electrician). 
 **Time:** about half a day for a 10-machine shop.
 **Cost:** about RM 150–250 per machine for the sensor and clamp, plus installation.
 
+## 0. What to buy
+
+**Prices are rough Malaysian online-retail estimates (Shopee / Lazada / local Shelly resellers). They have not been checked; confirm before ordering.**
+
+Only Shelly **Gen2 / Plus, Gen3 or Pro** devices work. They run our on-device script. **Gen1** (the original "Shelly EM", "Shelly 1PM") has no scripting, so it can't be used. Avoid Tuya / Sonoff / generic smart plugs: they report through the vendor's cloud, not to us.
+
+### A. Try it at home first (no electrician)
+
+| Item | Qty | Est. price | Notes |
+|---|---|---|---|
+| **Shelly Plus Plug UK** | 1 | ~RM 90–130 | Malaysia uses UK (BS 1363) sockets. Plug a home washer into it, then choose *Shelly Plus Plug UK* when registering the sensor. Max 13 A (~3 kW), which suits home washers and tumble dryers. **Not for commercial dryers.** |
+
+This shows the whole loop end to end: Wi-Fi, script, Running → Finished, the "almost done" alert and energy per cycle. It doesn't need a shop.
+
+### B. Pilot shop (about 10 machines, done by a registered wireman)
+
+| Item | Qty | Est. price | Notes |
+|---|---|---|---|
+| **Shelly EM Gen3** (or **Shelly Pro EM-50** for DIN rail) | 1 per 2 machines | ~RM 200–280 (Pro EM-50 ~RM 300–400) | Two clamp channels = two machines. Check whether one or two clamps come in the box. |
+| **Extra 50 A clamp (CT)** for that model | as needed | ~RM 40–70 | Use the clamp made for that Shelly model. Use 120 A clamps only for very large machines. |
+| **Shelly PM Mini Gen3** (optional) | small washers only | ~RM 70–100 | Inline, max 16 A. **Never on dryers.** |
+| Enclosure / DIN-rail space, labels | — | — | If there's no room in the DB, the electrician fits a small enclosure next to it. |
+| **4G router + prepaid data SIM** (only if the shop Wi-Fi is weak at the DB) | 1 | ~RM 150–250 + ~RM 30/month | Plan generously until it's measured on the first install. Every report is an HTTPS request, so a rough budget is about 0.5 GB per sensor per month (estimate). |
+
+Electrician labour is extra. It's typically quoted per shop; budget about half a day.
+
+For a 10-machine shop with 5 × EM Gen3 + 5 extra clamps, hardware is roughly **RM 1,200–1,700** before labour (estimate).
+
 ## 1. Before the visit
 
 - [ ] **List every machine:** code (W1, D3…), brand and model, washer or dryer, and whether a dryer is **gas or electric**.
@@ -16,6 +44,7 @@ This is a checklist for the owner and the installer (a registered electrician). 
   |---|---|---|
   | Dryers, big (≥ 15 kg) and 3-phase washers | **Shelly EM Gen3** or **Pro EM** with a 50 A / 120 A clamp | Clamp-on, no break in the cable; two clamps = two machines per device |
   | Small single-phase washers (< 16 A) | Shelly EM (same as above), or **Plus 1PM / PM Mini Gen3** inline | The inline ones carry the full current, so max 16 A: **never on a dryer** |
+  | Home testing, or a small washer on a 13 A socket | **Shelly Plus Plug UK** | Plug-in, no wiring. Max 13 A: **never on a commercial dryer** |
 
   3-phase machines: clamp **one** phase. That's enough to see the cycle.
 - [ ] **Wi-Fi at the DB:** check the signal at the DB with a phone. If it's weak, add an access point or a 4G router.

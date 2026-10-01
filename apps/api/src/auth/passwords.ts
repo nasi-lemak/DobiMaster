@@ -8,7 +8,7 @@ import { hashPassword, revokeSessions } from './owner.js';
 const RESET_TTL_MS = 30 * 60_000;
 export const MIN_PASSWORD = 8;
 
-function checkStrength(pw: string, email: string) {
+export function checkStrength(pw: string, email: string) {
   if (pw.length < MIN_PASSWORD) throw badRequest(`Use at least ${MIN_PASSWORD} characters`);
   if (pw.toLowerCase() === email.toLowerCase() || /^(password|12345678|dobimaster)/i.test(pw)) throw badRequest('Choose a less guessable password');
 }

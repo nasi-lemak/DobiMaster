@@ -209,6 +209,7 @@ const SHELLY_CHANNELS = [
   { value: 'em1:1', label: 'Shelly EM Gen3 / Pro EM — clamp 2' },
   { value: 'switch:0', label: 'Shelly Plus 1PM / Pro 1PM (inline, max 16 A)' },
   { value: 'pm1:0', label: 'Shelly PM Mini Gen3 (inline, max 16 A)' },
+  { value: 'switch:0', label: 'Shelly Plus Plug UK (plug-in, max 13 A: testing / small washers)' },
 ] as const;
 
 /** Ready-to-paste on-device script with URL, token and channel filled in, plus install steps. */
@@ -231,7 +232,7 @@ function ShellySetup({ r }: { r: Registered }) {
       <Field label="Which Shelly, and which channel measures this machine?" hint="Dryers and big washers need a clamp model (EM); the inline models are for small washers only.">
         <select className={inputClass} value={component} onChange={(e) => setComponent(e.target.value)}>
           {SHELLY_CHANNELS.map((c) => (
-            <option key={c.value} value={c.value}>
+            <option key={c.label} value={c.value}>
               {c.label}
             </option>
           ))}

@@ -35,6 +35,7 @@ export interface TenantsTable {
   name: string;
   slug: string;
   plan: Generated<string>;
+  onboarding: JsonOpt<{ stickersPrintedAt?: string }>;
   created_at: Timestamp;
 }
 

@@ -210,3 +210,5 @@ export interface MachineStateEvent {
   since: string;
   expectedEndAt: string | null;
 }
+
+export * from './defaults.js';
