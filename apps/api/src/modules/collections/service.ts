@@ -1,8 +1,10 @@
 import type { Ctx } from '../../context.js';
-import { badRequest, notFound } from '../../lib/errors.js';
+import { badRequest, conflict, notFound } from '../../lib/errors.js';
 import { pickProgram } from '../cycles/service.js';
 
 export interface CollectionInput {
+  /** Client-chosen id: re-sending the same collection returns the first one instead of a duplicate. */
+  id?: string;
   tenantId: string;
   shopId: string;
   userId: string;
@@ -13,13 +15,20 @@ export interface CollectionInput {
 
 export async function recordCollection(ctx: Ctx, input: CollectionInput) {
   if (!input.lines.length) throw badRequest('Add at least one machine');
-  const machines = await ctx.db.selectFrom('machines').select('id').where('shop_id', '=', input.shopId).where('tenant_id', '=', input.tenantId).execute();
+  if (input.id) {
+    const existing = await ctx.db.selectFrom('collections').selectAll().where('id', '=', input.id).executeTakeFirst();
+    if (existing) {
+      if (existing.tenant_id !== input.tenantId || existing.collected_by !== input.userId) throw conflict('id_taken', 'Collection id already used');
+      return existing;
+    }
+  }
+  const machines = await ctx.db.selectFrom('machines').select('id').where('shop_id', '=', input.shopId).where('tenant_id', '=', input.tenantId).where('deleted_at', 'is', null).execute();
   const valid = new Set(machines.map((m) => m.id));
   for (const l of input.lines) if (!valid.has(l.machineId)) throw notFound('Machine');
   return ctx.db.transaction().execute(async (trx) => {
     const c = await trx
       .insertInto('collections')
-      .values({ tenant_id: input.tenantId, shop_id: input.shopId, collected_at: input.collectedAt ?? ctx.now(), collected_by: input.userId, note: input.note ?? null })
+      .values({ ...(input.id ? { id: input.id } : {}), tenant_id: input.tenantId, shop_id: input.shopId, collected_at: input.collectedAt ?? ctx.now(), collected_by: input.userId, note: input.note ?? null })
       .returningAll()
       .executeTakeFirstOrThrow();
     await trx

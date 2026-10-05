@@ -25,6 +25,14 @@ beforeEach(async () => {
 const telemetry = (token: string, samples: Array<{ ts: number; powerW: number }>) =>
   h.app.inject({ method: 'POST', url: '/api/v1/device/telemetry', headers: { authorization: `Bearer ${token}` }, payload: { samples } });
 
+/** Let time pass while a running machine's sensor keeps reporting (real sensors report every ~10 s). */
+async function busy(token: string, minutes: number, powerW: number) {
+  for (let left = minutes; left > 0; left -= 5) {
+    h.clock.advance(Math.min(5, left));
+    await telemetry(token, [{ ts: h.clock.now.getTime(), powerW }]);
+  }
+}
+
 /** Let time pass while the sensor keeps reporting idle power (so it doesn't look offline). */
 async function idle(token: string, minutes: number) {
   for (let i = 0; i < minutes; i++) {
@@ -108,7 +116,7 @@ describe('"notify me when a dryer is free"', () => {
     h.clock.advance(1);
     expect((await watch(b)).statusCode).toBe(200);
 
-    h.clock.advance(30);
+    await busy(dryer.token, 30, 4000);
     await telemetry(dryer.token, [{ ts: h.clock.now.getTime(), powerW: 2 }]); // finished (laundry inside)
     expect(h.push.sent.filter((p) => p.payload.title === 'A dryer is free')).toHaveLength(0);
     await idle(dryer.token, 21); // finished-hold expires → free
@@ -117,7 +125,7 @@ describe('"notify me when a dryer is free"', () => {
 
     // The next time it frees up, the second customer gets it.
     await telemetry(dryer.token, [{ ts: h.clock.now.getTime(), powerW: 4000 }]);
-    h.clock.advance(30);
+    await busy(dryer.token, 30, 4000);
     await telemetry(dryer.token, [{ ts: h.clock.now.getTime(), powerW: 2 }]);
     await idle(dryer.token, 21);
     expect(h.push.sent.filter((p) => p.payload.title === 'A dryer is free').map((p) => p.endpoint)).toEqual([a.endpoint, b.endpoint]);
@@ -127,8 +135,11 @@ describe('"notify me when a dryer is free"', () => {
 describe('sensor analytics', () => {
   it('stores measured energy per cycle and prices it with the shop tariff', async () => {
     const t0 = h.clock.now.getTime();
-    await telemetry(f.sensored.token, [{ ts: t0, powerW: 1200 }, { ts: t0 + 25_000, powerW: 1200 }, { ts: t0 + 30 * 60_000, powerW: 1200 }]);
-    await telemetry(f.sensored.token, [{ ts: t0 + 30 * 60_000 + 1000, powerW: 2 }, { ts: t0 + 32 * 60_000, powerW: 2 }]);
+    await telemetry(f.sensored.token, [{ ts: t0, powerW: 1200 }, { ts: t0 + 25_000, powerW: 1200 }]);
+    await busy(f.sensored.token, 30, 1200);
+    const t1 = h.clock.now.getTime();
+    h.clock.advance(2);
+    await telemetry(f.sensored.token, [{ ts: t1 + 1000, powerW: 2 }, { ts: t1 + 2 * 60_000, powerW: 2 }]);
     const cycle = await h.ctx.db.selectFrom('cycles').select(['energy_wh', 'avg_power_w']).where('machine_id', '=', f.sensored.id).where('energy_wh', 'is not', null).executeTakeFirstOrThrow();
     expect(cycle.avg_power_w).toBeGreaterThan(1100);
     expect(cycle.energy_wh).toBeGreaterThan(550); // ~0.6 kWh

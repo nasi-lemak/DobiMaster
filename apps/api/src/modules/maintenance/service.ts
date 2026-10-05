@@ -106,8 +106,14 @@ export async function logMaintenance(
   ctx: Ctx,
   input: { tenantId: string; machineId: string; planId?: string | null; performedAt?: Date; userId: string; notes?: string | null; costSen?: number | null },
 ) {
-  const m = await ctx.db.selectFrom('machines').select(['shop_id']).where('id', '=', input.machineId).where('tenant_id', '=', input.tenantId).executeTakeFirst();
+  const m = await ctx.db.selectFrom('machines').select(['shop_id', 'type']).where('id', '=', input.machineId).where('tenant_id', '=', input.tenantId).executeTakeFirst();
   if (!m) throw Object.assign(new Error('Machine not found'), { statusCode: 404 });
+  if (input.planId) {
+    // The plan must be this business's and cover this machine (its own plan, or its shop + type).
+    const plan = await ctx.db.selectFrom('maintenance_plans').select(['shop_id', 'machine_id', 'machine_type']).where('id', '=', input.planId).where('tenant_id', '=', input.tenantId).executeTakeFirst();
+    const covers = plan && (plan.machine_id ? plan.machine_id === input.machineId : plan.shop_id === m.shop_id && plan.machine_type === m.type);
+    if (!covers) throw Object.assign(new Error('That plan does not cover this machine'), { statusCode: 400 });
+  }
   const row = await ctx.db
     .insertInto('maintenance_logs')
     .values({

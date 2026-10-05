@@ -13,6 +13,8 @@ class Realtime {
   private nextId = 1;
   private retry = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private lastSent: string[] = [];
+  private deniedRetryAt = 0;
 
   subscribe(channels: string[], fn: Listener, onReconnect?: () => void) {
     const id = this.nextId++;
@@ -37,6 +39,16 @@ class Realtime {
     ws.onmessage = (m) => {
       try {
         const msg = JSON.parse(m.data);
+        if (msg.op === 'subscribed') {
+          // The server reads the sign-in cookie when the socket opens. A socket opened before signing in is
+          // refused the business channel, so reconnect (at most once a minute) to pick up the new session.
+          const denied = this.lastSent.some((c) => c.startsWith('tenant:') && !msg.channels.includes(c));
+          if (denied && Date.now() - this.deniedRetryAt > 60_000) {
+            this.deniedRetryAt = Date.now();
+            ws.close();
+          }
+          return;
+        }
         if (msg.op !== 'evt') return;
         for (const s of this.subs.values()) if (s.channels.includes(msg.channel)) s.fn(msg);
       } catch {
@@ -55,6 +67,7 @@ class Realtime {
   private sendSubs(list: string[][]) {
     const channels = [...new Set(list.flat())];
     if (!channels.length || this.ws?.readyState !== WebSocket.OPEN) return;
+    this.lastSent = channels;
     this.ws.send(JSON.stringify({ op: 'sub', channels, token: getGuestToken() ?? undefined }));
   }
 }

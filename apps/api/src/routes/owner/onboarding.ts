@@ -14,7 +14,7 @@ import {
 import type { Ctx } from '../../context.js';
 import { json, type DB } from '../../db/index.js';
 import { config } from '../../config.js';
-import { actorOf, assertShopAccess, hashPassword, login, requireOwner, requirePerm, setSessionCookie } from '../../auth/owner.js';
+import { accessibleShopIds, actorOf, assertShopAccess, hashPassword, login, requireOwner, requirePerm, setSessionCookie } from '../../auth/owner.js';
 import { checkStrength } from '../../auth/passwords.js';
 import { AppError, badRequest, conflict, notFound } from '../../lib/errors.js';
 import { shortToken } from '../../lib/ids.js';
@@ -110,7 +110,9 @@ export async function onboardingRoutes(app: FastifyInstance, ctx: Ctx, opts: { s
   app.get('/owner/onboarding', async (req) => {
     const o = requireOwner(req);
     const tenant = await ctx.db.selectFrom('tenants').select(['onboarding']).where('id', '=', o.tenantId).executeTakeFirstOrThrow();
-    const shops = await ctx.db.selectFrom('shops').select(['id', 'name', 'slug', 'is_published']).where('tenant_id', '=', o.tenantId).orderBy('created_at').execute();
+    // Branch-limited staff only ever see their own branches.
+    const ids = await accessibleShopIds(ctx, o);
+    const shops = ids.length ? await ctx.db.selectFrom('shops').select(['id', 'name', 'slug', 'is_published']).where('id', 'in', ids).orderBy('created_at').execute() : [];
     const shop = shops[0] ?? null;
     const machines = shop
       ? await ctx.db.selectFrom('machines').select(['id', 'code', 'type', 'capacity_kg']).where('shop_id', '=', shop.id).where('deleted_at', 'is', null).orderBy('type', 'desc').orderBy('code').execute()

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { isAllowedPushEndpoint } from '../../modules/push/service.js';
 import { ROLES } from '@dobi/shared';
 import type { Ctx } from '../../context.js';
 import { json } from '../../db/index.js';
@@ -161,11 +162,14 @@ export async function ownerCoreRoutes(app: FastifyInstance, ctx: Ctx) {
   // ---- owner push subscriptions ----
   app.post('/owner/push/subscribe', async (req) => {
     const o = requireOwner(req);
-    const body = z.object({ endpoint: z.string().url().max(1000), keys: z.object({ p256dh: z.string(), auth: z.string() }) }).parse(req.body);
+    const body = z
+      .object({ endpoint: z.string().url().max(1000).refine(isAllowedPushEndpoint, 'Not a browser push service'), keys: z.object({ p256dh: z.string().max(200), auth: z.string().max(100) }) })
+      .parse(req.body);
+    // Tied to this sign-in: alerts stop when this device signs out or is signed out remotely.
     await ctx.db
       .insertInto('push_subscriptions')
-      .values({ user_id: o.userId, endpoint: body.endpoint, keys: json(body.keys) })
-      .onConflict((oc) => oc.column('endpoint').doUpdateSet({ user_id: o.userId, customer_id: null, keys: json(body.keys), failed_count: 0 }))
+      .values({ user_id: o.userId, owner_session_id: o.sessionId, endpoint: body.endpoint, keys: json(body.keys) })
+      .onConflict((oc) => oc.column('endpoint').doUpdateSet({ user_id: o.userId, owner_session_id: o.sessionId, keys: json(body.keys), failed_count: 0 }))
       .execute();
     return { ok: true };
   });
@@ -195,8 +199,17 @@ export async function ownerCoreRoutes(app: FastifyInstance, ctx: Ctx) {
       })
       .parse(req.body);
     if (body.role === 'owner' && o.role !== 'owner') throw badRequest('Only owners can add owners');
+    if (body.shopIds) {
+      const own = await ctx.db.selectFrom('shops').select('id').where('tenant_id', '=', o.tenantId).where('id', 'in', body.shopIds.length ? body.shopIds : ['00000000-0000-0000-0000-000000000000']).execute();
+      if (own.length !== new Set(body.shopIds).size) throw badRequest('Unknown branch');
+    }
     const email = body.email.toLowerCase();
     let user = await ctx.db.selectFrom('users').select(['id']).where('email', '=', email).executeTakeFirst();
+    if (user) {
+      // One sign-in belongs to one business (there's no business switcher), so don't create an account they can't reach.
+      const elsewhere = await ctx.db.selectFrom('memberships').select('id').where('user_id', '=', user.id).where('tenant_id', '<>', o.tenantId).executeTakeFirst();
+      if (elsewhere) throw conflict('email_in_use', 'This email is already used by another business on DobiMaster. Use a different email for this person.');
+    }
     if (!user) {
       user = await ctx.db
         .insertInto('users')
@@ -234,6 +247,8 @@ export async function ownerCoreRoutes(app: FastifyInstance, ctx: Ctx) {
   // ---- audit log ----
   app.get('/owner/audit', async (req) => {
     const o = requirePerm(req, 'audit.view');
+    // Entries span every branch (staff, refunds, settings), so only people who can see all branches read it.
+    if (o.shopIds !== null) throw forbidden('The audit log covers every branch. Ask the owner.');
     const q = z.object({ entityType: z.string().max(40).optional(), entityId: z.string().max(80).optional(), limit: z.coerce.number().int().min(1).max(500).default(100) }).parse(req.query);
     let query = ctx.db.selectFrom('audit_log').selectAll().where('tenant_id', '=', o.tenantId).orderBy('created_at', 'desc').limit(q.limit);
     if (q.entityType) query = query.where('entity_type', '=', q.entityType);

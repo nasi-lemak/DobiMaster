@@ -6,7 +6,7 @@ import type { Ctx } from '../../context.js';
 import { json } from '../../db/index.js';
 import type { Machine } from '../../db/types.js';
 import { config } from '../../config.js';
-import { accessibleShopIds, actorOf, assertShopAccess, requireOwner, requirePerm, scopeShops } from '../../auth/owner.js';
+import { accessibleShopIds, actorOf, assertShopAccess, requireOwner, requirePerm, scopeShops, can } from '../../auth/owner.js';
 import { badRequest, conflict, notFound } from '../../lib/errors.js';
 import { secretToken, sha256, shortToken } from '../../lib/ids.js';
 import { audit } from '../../modules/audit/service.js';
@@ -363,14 +363,16 @@ export async function ownerShopRoutes(app: FastifyInstance, ctx: Ctx) {
       if (b > a) down[s.state] = (down[s.state] ?? 0) + (b - a) / 3600_000;
     }
     const u = util.machines.find((x) => x.machineId === id);
+    // Staff without revenue access see machine health, not money (the dashboard hides it; so must the API).
+    const money = can(o, 'revenue.view');
     return {
       machine: ownerMachine(m),
       device: device ?? null,
-      stats30d: { cycles: u?.cycles ?? 0, utilisation: u?.utilisation ?? 0, estimatedRevenueSen: u?.estimatedRevenueSen ?? 0, downtimeHours: down },
+      stats30d: { cycles: u?.cycles ?? 0, utilisation: u?.utilisation ?? 0, estimatedRevenueSen: money ? (u?.estimatedRevenueSen ?? 0) : null, downtimeHours: down },
       stateLog,
-      cycles,
+      cycles: money ? cycles : cycles.map((c) => ({ ...c, price_sen: null })),
       tickets,
-      maintenance: maint,
+      maintenance: money ? maint : maint.map((l) => ({ ...l, cost_sen: null })),
       due: due.filter((d) => d.machineId === id),
     };
   });
@@ -379,6 +381,7 @@ export async function ownerShopRoutes(app: FastifyInstance, ctx: Ctx) {
     const o = requireOwner(req);
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const m = await machineForOwner(ctx, o.tenantId, id);
+    await assertShopAccess(ctx, o, m.shop_id);
     const svg = await QRCode.toString(`${config.publicUrl}/m/${m.qr_token}`, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
     return reply.type('image/svg+xml').send(svg);
   });

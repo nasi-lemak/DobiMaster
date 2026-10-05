@@ -19,8 +19,10 @@ const DAY_NAMES: Record<string, string[]> = {
 };
 
 /** Group machines into classes customers actually choose between: "Washer 10 kg", "Washer 20 kg"… */
-function classes(machines: PublicMachine[]) {
-  const map = new Map<string, PublicMachine[]>();
+type ShopMachine = Omit<PublicMachine, 'qrToken'>;
+
+function classes(machines: ShopMachine[]) {
+  const map = new Map<string, ShopMachine[]>();
   for (const m of machines) map.set(`${m.type}:${m.capacityKg}`, [...(map.get(`${m.type}:${m.capacityKg}`) ?? []), m]);
   return [...map.entries()].map(([key, ms]) => {
     const prices = ms.flatMap((m) => m.programs.map((p) => p.priceSen));
@@ -123,20 +125,20 @@ export function ShopPage() {
         <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {s.machines.map((m) => (
             <li key={m.id}>
-              <Link to={`/m/${m.qrToken}`} className="block h-full">
-                <Card className="h-full p-3 transition hover:border-brand/40">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-lg font-bold">{m.code}</span>
-                    <span className="text-xs text-muted">{t('capacity', { kg: m.capacityKg })}</span>
-                  </div>
-                  <p className="mb-2 text-xs text-muted">{m.type === 'washer' ? t('washer') : t('dryer')}</p>
-                  <MachineStateBadge m={m} now={now} />
-                  {m.openIssues > 0 && m.state !== 'fault' && <p className="mt-1 text-[11px] text-serious-ink">⚠ {t('reportedIssue', { n: m.openIssues })}</p>}
-                </Card>
-              </Link>
+              {/* Not a link: timers and reports need the machine's own QR sticker (proof you're at it). */}
+              <Card className="h-full p-3">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-lg font-bold">{m.code}</span>
+                  <span className="text-xs text-muted">{t('capacity', { kg: m.capacityKg })}</span>
+                </div>
+                <p className="mb-2 text-xs text-muted">{m.type === 'washer' ? t('washer') : t('dryer')}</p>
+                <MachineStateBadge m={m} now={now} />
+                {m.openIssues > 0 && m.state !== 'fault' && <p className="mt-1 text-[11px] text-serious-ink">⚠ {t('reportedIssue', { n: m.openIssues })}</p>}
+              </Card>
             </li>
           ))}
         </ul>
+        <p className="mt-2 text-xs text-muted">📷 {t('scanToStart')}</p>
       </section>
 
       {tx(s.policy) && (

@@ -67,7 +67,8 @@ export interface ShopDetail extends Omit<ShopSummary, 'distanceKm' | 'announceme
   facilities: Record<string, boolean>;
   policy: Partial<I18nText>;
   announcements: Array<{ id: string; message: Partial<I18nText>; level: 'info' | 'warning'; endsAt: string | null }>;
-  machines: PublicMachine[];
+  /** Shop pages never carry QR tokens. */
+  machines: Array<Omit<PublicMachine, 'qrToken'>>;
 }
 
 export interface MachineResponse {

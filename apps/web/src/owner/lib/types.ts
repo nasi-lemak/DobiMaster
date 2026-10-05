@@ -181,7 +181,7 @@ export interface DueItem {
 export interface MachineDetail {
   machine: OwnerMachine;
   device: { id: string; kind: string; label: string; last_seen_at: string | null; last_power_w: number | null; online: boolean; heartbeat_sec: number } | null;
-  stats30d: { cycles: number; utilisation: number; estimatedRevenueSen: number; downtimeHours: Record<string, number> };
+  stats30d: { cycles: number; utilisation: number; estimatedRevenueSen: number | null; downtimeHours: Record<string, number> };
   stateLog: StateLogRow[];
   cycles: CycleRow[];
   tickets: Array<{ id: string; ref: string; title: string; status: TicketStatus; severity: Severity; created_at: string; source: string }>;

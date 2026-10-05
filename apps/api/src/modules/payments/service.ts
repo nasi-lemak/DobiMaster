@@ -10,7 +10,8 @@ import { isOpenAt, addMinutes } from '../../lib/time.js';
 import { raiseAlert } from '../alerts/service.js';
 import { pickProgram } from '../cycles/service.js';
 import { recomputeMachineState } from '../machines/state.js';
-import { processGatewayRefund } from '../refunds/service.js';
+import { processGatewayRefund, refundableSen } from '../refunds/service.js';
+import type { GatewayEvent } from './gateway.js';
 import { createSystemTicket } from '../tickets/service.js';
 import { config } from '../../config.js';
 
@@ -116,6 +117,19 @@ export async function handleGatewayWebhook(ctx: Ctx, headers: Record<string, str
     ctx.log.warn({ evt }, 'webhook for unknown payment');
     return { duplicate: false };
   }
+  try {
+    await applyWebhookEvent(ctx, evt, payment.id);
+  } catch (err) {
+    // Forget the event so the gateway's retry is processed instead of being answered "duplicate".
+    // Every transition below is guarded, so re-processing is safe; the reconcile sweep catches the rest.
+    await ctx.db.deleteFrom('payment_events').where('id', '=', logged.id).execute();
+    throw err;
+  }
+  return { duplicate: false };
+}
+
+async function applyWebhookEvent(ctx: Ctx, evt: GatewayEvent, paymentId: string) {
+  const payment = { id: paymentId };
   if (evt.type === 'payment.succeeded') await markSucceeded(ctx, payment.id);
   if (evt.type === 'payment.failed') {
     const r = await ctx.db
@@ -127,7 +141,6 @@ export async function handleGatewayWebhook(ctx: Ctx, headers: Record<string, str
       .executeTakeFirst();
     if (r) await publishPayment(ctx, payment.id);
   }
-  return { duplicate: false };
 }
 
 async function publishPayment(ctx: Ctx, paymentId: string) {
@@ -215,7 +228,14 @@ async function sendStart(ctx: Ctx, commandId: string, attempt: number) {
   const cmd = await ctx.db.selectFrom('machine_commands').selectAll().where('id', '=', commandId).executeTakeFirstOrThrow();
   const machine = await ctx.db.selectFrom('machines').selectAll().where('id', '=', cmd.machine_id).executeTakeFirstOrThrow();
   const program = pickProgram(machine, (cmd.payload as { programId?: string }).programId);
-  await ctx.db.updateTable('machine_commands').set({ status: 'sent', attempts: attempt, updated_at: ctx.now() }).where('id', '=', commandId).execute();
+  const sent = await ctx.db
+    .updateTable('machine_commands')
+    .set({ status: 'sent', attempts: attempt, updated_at: ctx.now() })
+    .where('id', '=', commandId)
+    .where('status', 'not in', ['confirmed', 'failed']) // a sensor confirmation may have just landed
+    .returning('id')
+    .executeTakeFirst();
+  if (!sent) return;
   try {
     await ctx.controllers.get(machine.control)?.start(ctx, { commandId, machine, program });
   } catch (err) {
@@ -278,13 +298,22 @@ async function onStartTimeout(ctx: Ctx, payload: { paymentId: string; commandId:
 /** Refund the full amount through the gateway. Idempotent: at most one automatic refund per payment. */
 export async function autoRefund(ctx: Ctx, paymentId: string, reason: string) {
   const p = await ctx.db.selectFrom('payments').selectAll().where('id', '=', paymentId).executeTakeFirstOrThrow();
+  // A manual request still waiting for the owner is superseded: the automatic refund pays the customer now.
+  await ctx.db
+    .updateTable('refunds')
+    .set({ status: 'rejected', decided_at: ctx.now(), note: 'Superseded by the automatic refund' })
+    .where('payment_id', '=', p.id)
+    .where('status', '=', 'requested')
+    .execute();
+  const amount = await refundableSen(ctx, p.id);
+  if (amount <= 0) return; // already (being) refunded in full
   const refund = await ctx.db
     .insertInto('refunds')
     .values({
       tenant_id: p.tenant_id,
       shop_id: p.shop_id,
       payment_id: p.id,
-      amount_sen: p.amount_sen - p.refunded_sen,
+      amount_sen: amount,
       method: 'original',
       status: 'approved',
       automatic: true,
@@ -309,7 +338,34 @@ export async function autoRefund(ctx: Ctx, paymentId: string, reason: string) {
   await publishPayment(ctx, p.id);
 }
 
+/**
+ * Safety net: a payment that succeeded but whose start was never sent (a crash or DB error between the
+ * webhook and the start command) would otherwise leave the customer charged with no wash and no refund.
+ */
+export async function reconcilePayments(ctx: Ctx) {
+  const stale = await ctx.db
+    .selectFrom('payments as p')
+    .select(['p.id', 'p.cycle_id', 'p.machine_id'])
+    .where('p.status', '=', 'succeeded')
+    .where('p.refunded_sen', '=', 0)
+    .where('p.succeeded_at', '<', new Date(ctx.now().getTime() - STUCK_PAYMENT_MIN * 60_000))
+    .where((eb) =>
+      eb.not(eb.exists(eb.selectFrom('machine_commands as c').select('c.id').whereRef('c.payment_id', '=', 'p.id').where('c.status', 'in', ['sent', 'confirmed', 'failed']))),
+    )
+    .where((eb) => eb.not(eb.exists(eb.selectFrom('refunds as r').select('r.id').whereRef('r.payment_id', '=', 'p.id'))))
+    .limit(100)
+    .execute();
+  for (const p of stale) {
+    if (p.cycle_id) await ctx.db.updateTable('cycles').set({ status: 'aborted', ended_at: ctx.now() }).where('id', '=', p.cycle_id).where('status', '=', 'running').execute();
+    await autoRefund(ctx, p.id, 'start_not_sent');
+    await recomputeMachineState(ctx, p.machine_id, 'stuck paid start refunded');
+  }
+  return stale.length;
+}
+export const STUCK_PAYMENT_MIN = 10;
+
 export function registerPaymentJobs(ctx: Ctx) {
+  ctx.jobs.register('sweep.payments', () => reconcilePayments(ctx).then(() => undefined));
   ctx.jobs.register('payment.start_timeout', (payload) => onStartTimeout(ctx, payload as { paymentId: string; commandId: string; attempt: number }));
   ctx.jobs.register('refund.process', ({ refundId }, job) => processGatewayRefund(ctx, refundId, job.attempts));
   ctx.jobs.register('payment.expire', async ({ paymentId }) => {
@@ -318,8 +374,16 @@ export function registerPaymentJobs(ctx: Ctx) {
     // Reconcile with the gateway before giving up — the webhook may have been lost.
     const status = p.provider_ref ? await ctx.gateway.getStatus(p.provider_ref) : 'pending';
     if (status === 'succeeded') {
-      await ctx.db.updateTable('payments').set({ status: 'expired', updated_at: ctx.now() }).where('id', '=', p.id).execute();
-      await markSucceeded(ctx, p.id); // late → auto refund
+      // Only if it is still pending: the webhook may have landed while we asked the gateway, and then the
+      // payment already started a machine. Overwriting that with "expired" would refund a wash that ran.
+      const expired = await ctx.db
+        .updateTable('payments')
+        .set({ status: 'expired', updated_at: ctx.now() })
+        .where('id', '=', p.id)
+        .where('status', 'in', ['created', 'pending'])
+        .returning('id')
+        .executeTakeFirst();
+      if (expired) await markSucceeded(ctx, p.id); // late → auto refund
       return;
     }
     await ctx.db

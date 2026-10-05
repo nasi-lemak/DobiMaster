@@ -84,6 +84,11 @@ export interface StartCustomerCycleInput {
  * Customer taps "I've started it — notify me". Idempotent by client-generated id.
  * If a sensor already detected the start, the check-in is merged into that cycle.
  */
+export const MAX_RUNNING_TIMERS_PER_GUEST = 4;
+/** A sensor-confirmed cycle past its expected end is re-checked this often, and closed after this long regardless. */
+export const FINISH_RECHECK_MIN = 10;
+export const FINISH_GIVE_UP_MIN = 6 * 60;
+
 export async function startCustomerCycle(ctx: Ctx, input: StartCustomerCycleInput): Promise<Cycle> {
   const existing = await ctx.db.selectFrom('cycles').selectAll().where('id', '=', input.id).executeTakeFirst();
   if (existing) {
@@ -103,6 +108,10 @@ export async function startCustomerCycle(ctx: Ctx, input: StartCustomerCycleInpu
   }
   const program = pickProgram(machine, input.programId);
   const now = ctx.now();
+
+  // One person rarely runs more than a few machines at once; a cap stops a single guest marking a shop "in use".
+  const mine = await ctx.db.selectFrom('cycles').select((eb) => eb.fn.countAll<string>().as('n')).where('customer_id', '=', input.customerId).where('status', '=', 'running').executeTakeFirst();
+  if (Number(mine?.n ?? 0) >= MAX_RUNNING_TIMERS_PER_GUEST) throw new AppError(429, 'too_many_timers', `You already have ${MAX_RUNNING_TIMERS_PER_GUEST} timers running`);
 
   const running = await ctx.db
     .selectFrom('cycles')
@@ -278,6 +287,15 @@ export async function sensorCycleDiscarded(ctx: Ctx, machine: Machine) {
     await ctx.db.updateTable('cycles').set({ status: 'aborted', ended_at: ctx.now() }).where('id', '=', running.id).execute();
     await cancelTimers(ctx, running.id, true);
     await recomputeMachineState(ctx, machine.id, 'sensor blip discarded');
+    return;
+  }
+  // A customer's or paid cycle that the blip had "confirmed": the sensor no longer vouches for it, so hand it
+  // back to its timer (otherwise nothing would ever end it and the machine would stay "running").
+  if (running.sensor_confirmed) {
+    await ctx.db.updateTable('cycles').set({ sensor_confirmed: false }).where('id', '=', running.id).execute();
+    const at = running.expected_end_at > ctx.now() ? running.expected_end_at : ctx.now();
+    await ctx.jobs.reschedule('cycle.finish', at, { cycleId: running.id }, jobKeys.finish(running.id));
+    await recomputeMachineState(ctx, machine.id, 'sensor blip discarded');
   }
 }
 
@@ -365,12 +383,17 @@ export async function staffClearMachine(ctx: Ctx, machineId: string) {
   const now = ctx.now();
   const open = await ctx.db
     .selectFrom('cycles')
-    .select(['id', 'status', 'sensor_confirmed'])
+    .select(['id', 'status', 'sensor_confirmed', 'expected_end_at'])
     .where('machine_id', '=', machineId)
     .where('status', 'in', ['running', 'finished'])
     .execute();
+  const machine = await ctx.db.selectFrom('machines').select(['device_id']).where('id', '=', machineId).executeTakeFirst();
+  const device = machine?.device_id ? await ctx.db.selectFrom('devices').select(['online', 'last_power_w', 'config']).where('id', '=', machine.device_id).executeTakeFirst() : null;
+  const endW = Number((device?.config as { endW?: number } | null)?.endW ?? 10);
+  const sensorSaysIdle = !device || !device.online || (device.last_power_w ?? 0) < endW;
   for (const c of open) {
-    if (c.status === 'running' && c.sensor_confirmed) continue; // the machine really is running
+    // Leave a cycle the sensor confirmed while the machine is still drawing power and not yet overdue.
+    if (c.status === 'running' && c.sensor_confirmed && !sensorSaysIdle && c.expected_end_at > now) continue;
     await ctx.db
       .updateTable('cycles')
       .set(c.status === 'running' ? { status: 'aborted', ended_at: now } : { status: 'collected', collected_at: now })
@@ -396,9 +419,14 @@ export function registerCycleJobs(ctx: Ctx) {
     const c = await ctx.db.selectFrom('cycles').selectAll().where('id', '=', cycleId).executeTakeFirst();
     if (!c || c.status !== 'running') return;
     if (c.sensor_confirmed) {
-      // The sensor decides when it ends — unless the device went offline mid-cycle.
+      // The sensor decides when it ends, unless it has gone silent. Keep checking: the device can drop off
+      // after the expected end, and then nothing else would ever finish the cycle.
       const m = await ctx.db.selectFrom('machines').select(['state']).where('id', '=', c.machine_id).executeTakeFirst();
-      if (m?.state !== 'offline') return;
+      const giveUpAt = addMinutes(c.expected_end_at, FINISH_GIVE_UP_MIN);
+      if (m?.state !== 'offline' && ctx.now() < giveUpAt) {
+        await ctx.jobs.schedule('cycle.finish', addMinutes(ctx.now(), FINISH_RECHECK_MIN), { cycleId });
+        return;
+      }
     }
     await finishCycle(ctx, c.id, c.expected_end_at);
   });

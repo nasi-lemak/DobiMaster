@@ -52,6 +52,7 @@ export function registerJobs(ctx: Ctx, opts: { periodic: boolean }) {
 
   if (opts.periodic) {
     ctx.jobs.every('sweep.devices', 60_000);
+    ctx.jobs.every('sweep.payments', 5 * 60_000);
     ctx.jobs.every('sweep.maintenance', 3600_000);
     ctx.jobs.every('sweep.low_usage', 6 * 3600_000);
     ctx.jobs.every('sweep.cleanup', 24 * 3600_000);

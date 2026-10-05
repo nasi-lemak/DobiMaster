@@ -155,6 +155,8 @@ export interface PushSubscriptionsTable {
   locale: Generated<string>;
   failed_count: Generated<number>;
   created_at: Timestamp;
+  /** Owner subscriptions only: alerts stop once this sign-in session ends. */
+  owner_session_id: string | null;
 }
 
 export interface PaymentsTable {

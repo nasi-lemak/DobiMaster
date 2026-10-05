@@ -5,6 +5,12 @@ import { isOpenAt, localParts, openIntervalsForDow } from '../../lib/time.js';
 import { peakHours } from '../analytics/service.js';
 import { payBlocker } from '../payments/service.js';
 
+/** The only shop settings customers need (not internal ones like tariffs or fault thresholds). */
+function customerSettings(s: Shop) {
+  const all = { ...DEFAULT_SHOP_SETTINGS, ...s.settings };
+  return { remindBeforeMin: all.remindBeforeMin, finishedHoldMin: all.finishedHoldMin, uncollectedReminderMin: all.uncollectedReminderMin };
+}
+
 /** Public machine view — no customer data, ever. */
 export function publicMachine(m: Machine, extra: { expectedEndAt: Date | null; openIssues: number; payable: boolean }) {
   return {
@@ -201,12 +207,17 @@ export async function shopDetail(ctx: Ctx, slug: string) {
     openingHours: s.opening_hours,
     facilities: s.facilities,
     policy: s.policy,
-    settings: { ...DEFAULT_SHOP_SETTINGS, ...s.settings },
+    settings: customerSettings(s),
     ...hoursInfo(s, ctx.now()),
     availability: availability(machines, extras),
     busyness: await busyness(ctx, s),
     announcements: (await activeAnnouncements(ctx, [s.id])).map((a) => ({ id: a.id, message: a.message, level: a.level, endsAt: a.ends_at?.toISOString() ?? null })),
-    machines: machines.map((m) => publicMachine(m, extras.get(m.id)!)),
+    // No QR tokens here: a machine's token is proof of standing at it (timers, reports, payments),
+    // so it is only ever read off the sticker, never handed out by the shop page.
+    machines: machines.map((m) => {
+      const { qrToken: _secret, ...pub } = publicMachine(m, extras.get(m.id)!);
+      return pub;
+    }),
   };
 }
 
@@ -224,7 +235,7 @@ export async function machineByQr(ctx: Ctx, qrToken: string) {
       whatsapp: s.whatsapp,
       policy: s.policy,
       ...hoursInfo(s, ctx.now()),
-      settings: { ...DEFAULT_SHOP_SETTINGS, ...s.settings },
+      settings: customerSettings(s),
     },
   };
 }

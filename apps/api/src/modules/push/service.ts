@@ -71,13 +71,20 @@ export class PushService {
     return subs.length;
   }
 
-  /** Notify every member of a tenant (optionally only those with access to a shop). */
+  /**
+   * Notify every member of a tenant (optionally only those with access to a shop), on devices where they
+   * are still signed in: a logged-out, revoked or expired session gets nothing.
+   */
   async toTenant(tenantId: string, payload: PushPayload, shopId?: string) {
     const rows = await this.db
       .selectFrom('push_subscriptions as p')
       .innerJoin('memberships as m', 'm.user_id', 'p.user_id')
+      .innerJoin('owner_sessions as s', 's.id', 'p.owner_session_id')
       .select(['p.id', 'p.endpoint', 'p.keys', 'p.failed_count', 'm.shop_ids', 'm.role'])
       .where('m.tenant_id', '=', tenantId)
+      .whereRef('s.user_id', '=', 'p.user_id')
+      .where('s.revoked_at', 'is', null)
+      .where('s.expires_at', '>', new Date())
       .execute();
     const targets = rows.filter((r) => !shopId || r.shop_ids === null || r.shop_ids.includes(shopId));
     await Promise.all(targets.map((s) => this.deliver(s, payload)));
@@ -97,3 +104,24 @@ export class PushService {
     }
   }
 }
+
+/**
+ * Push endpoints must be real browser push services over HTTPS. Anything else would let a client make the
+ * server send requests to arbitrary (including internal) addresses. PUSH_EXTRA_HOSTS adds hosts for tests.
+ */
+const PUSH_HOSTS = ['fcm.googleapis.com', 'updates.push.services.mozilla.com', 'push.services.mozilla.com', 'web.push.apple.com', 'notify.windows.com', 'push.apple.com'];
+export function isAllowedPushEndpoint(endpoint: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(endpoint);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== 'https:' || (u.port && u.port !== '443')) return false;
+  const extra = (process.env.PUSH_EXTRA_HOSTS ?? '').split(',').map((h) => h.trim()).filter(Boolean);
+  return [...PUSH_HOSTS, ...extra].some((h) => u.hostname === h || u.hostname.endsWith(`.${h}`));
+}
+
+/** Most phones/browsers a customer could reasonably use; older subscriptions beyond this are dropped. */
+export const MAX_PUSH_SUBSCRIPTIONS_PER_CUSTOMER = 5;
+

@@ -7,7 +7,7 @@ import { unauthorized } from '../../lib/errors.js';
 import { raiseAlert, resolveAlert } from '../alerts/service.js';
 import { sensorCycleDiscarded, sensorCycleEnd, sensorCycleStart } from '../cycles/service.js';
 import { recomputeMachineState } from '../machines/state.js';
-import { adapters } from './adapters.js';
+import { adapters, sanitizeSamples } from './adapters.js';
 import {
   DRYER_DEFAULTS,
   WASHER_DEFAULTS,
@@ -45,7 +45,7 @@ export async function authenticateDevice(ctx: Ctx, bearer: string | undefined) {
 export async function ingestPayload(ctx: Ctx, device: Device, payload: unknown) {
   const adapter = adapters[device.kind];
   if (!adapter) throw new Error(`no adapter for ${device.kind}`);
-  return ingestSamples(ctx, device.id, adapter.parse(payload, ctx.now()));
+  return ingestSamples(ctx, device.id, sanitizeSamples(adapter.parse(payload, ctx.now()), ctx.now()));
 }
 
 /**
@@ -79,8 +79,9 @@ export async function ingestSamples(ctx: Ctx, deviceId: string, samples: Sample[
     await resolveAlert(ctx, device.tenant_id, `device_offline:${device.id}`);
     await resolveAlert(ctx, device.tenant_id, `shop_offline:${device.shop_id}`);
     await ctx.bus.publish(channels.tenant(device.tenant_id), 'device.status', { deviceId: device.id, online: true });
-    if (machine) await recomputeMachineState(ctx, machine.id, 'device back online');
   }
+  // Also when the device row never went offline but a recompute in the "stale" window stored the machine as offline.
+  if (machine && (!wasOnline || machine.state === 'offline')) await recomputeMachineState(ctx, machine.id, 'device back online');
   if (machine) {
     for (const evt of events) await applyDetectorEvent(ctx, machine, evt);
   }
@@ -220,6 +221,8 @@ export async function checkDryerHeating(ctx: Ctx, machine: Machine, avgPowerW: n
 export async function recordHeartbeat(ctx: Ctx, device: Device) {
   if (device.online) {
     await ctx.db.updateTable('devices').set({ last_seen_at: ctx.now() }).where('id', '=', device.id).execute();
+    const m = await ctx.db.selectFrom('machines').select(['id', 'state']).where('device_id', '=', device.id).where('deleted_at', 'is', null).executeTakeFirst();
+    if (m?.state === 'offline') await recomputeMachineState(ctx, m.id, 'device heartbeat');
     return;
   }
   await ingestSamples(ctx, device.id, []);

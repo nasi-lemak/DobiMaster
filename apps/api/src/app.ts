@@ -43,6 +43,8 @@ export interface BuildOptions {
   blobs?: BlobStore;
   gateway?: PaymentGateway;
   controllers?: ControllerRegistry;
+  /** How often open WebSockets re-check owner sessions (default 25 s; tests use less). */
+  wsRevalidateMs?: number;
   /** Overrides SIGNUP_MODE (tests). */
   signupMode?: 'open' | 'first' | 'closed';
   /** Start the background job loop and periodic sweeps (off in tests — they call jobs.runDue()). */
@@ -124,7 +126,7 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
     },
     { prefix: '/api/v1' },
   );
-  await app.register(async (w) => wsRoutes(w, ctx));
+  await app.register(async (w) => wsRoutes(w, ctx, { revalidateMs: opts.wsRevalidateMs }));
 
   // Production: serve the built web app (SPA fallback) from the same origin.
   const webDist = config.webDist ?? resolve(process.cwd(), '../web/dist');

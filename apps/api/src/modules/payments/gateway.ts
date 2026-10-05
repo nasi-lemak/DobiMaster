@@ -42,6 +42,8 @@ export class MockGateway implements PaymentGateway {
   private outcomes = new Map<string, 'pending' | 'succeeded' | 'failed'>();
   refunds: Array<{ paymentId: string; amountSen: number; idempotencyKey: string }> = [];
   failRefunds = false;
+  /** Simulates a gateway that accepts refunds but settles them later. */
+  pendingRefunds = false;
 
   async createCharge(input: CreateChargeInput) {
     const providerRef = `mock_${input.paymentId.slice(0, 8)}_${Date.now().toString(36)}`;
@@ -61,9 +63,9 @@ export class MockGateway implements PaymentGateway {
   }
 
   parseWebhook(headers: Record<string, string | string[] | undefined>, rawBody: string): GatewayEvent {
-    const sig = String(headers['x-mock-signature'] ?? '');
-    const expected = this.sign(rawBody);
-    if (sig.length !== expected.length || !timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+    const sig = Buffer.from(String(headers['x-mock-signature'] ?? ''));
+    const expected = Buffer.from(this.sign(rawBody));
+    if (sig.length !== expected.length || !timingSafeEqual(sig, expected)) {
       throw unauthorized('Invalid webhook signature');
     }
     const b = JSON.parse(rawBody) as { id: string; type: GatewayEvent['type']; paymentId: string; providerRef: string };
@@ -73,6 +75,7 @@ export class MockGateway implements PaymentGateway {
   async refund(input: { paymentId: string; providerRef: string; amountSen: number; idempotencyKey: string }) {
     if (this.failRefunds) throw new Error('mock gateway refund failure');
     if (!this.refunds.some((r) => r.idempotencyKey === input.idempotencyKey)) this.refunds.push(input);
+    if (this.pendingRefunds) return { status: 'pending' as const, refundRef: `mockrf_${input.idempotencyKey.slice(-8)}` };
     return { status: 'succeeded' as const, refundRef: `mockrf_${input.idempotencyKey.slice(-8)}` };
   }
 

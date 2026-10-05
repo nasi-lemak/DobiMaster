@@ -84,7 +84,7 @@ function AutoTag() {
 function RefundCard({ r }: { r: RefundRow }) {
   const [reference, setReference] = useState('');
   const inv = [['owner', 'refunds'], ['owner', 'overview'], ['owner', 'ticket']];
-  const decide = useApiMutation((b: { action: 'approve' | 'reject' | 'mark_paid'; reference?: string; note?: string }) => api.post(`/owner/refunds/${r.id}/decision`, b), inv);
+  const decide = useApiMutation((b: { action: 'approve' | 'reject' | 'mark_paid' | 'retry'; reference?: string; note?: string }) => api.post(`/owner/refunds/${r.id}/decision`, b), inv);
   const manual = r.method !== 'original';
 
   return (
@@ -134,7 +134,15 @@ function RefundCard({ r }: { r: RefundRow }) {
             </ConfirmButton>
           </div>
         )}
-        {(r.status === 'approved' || r.status === 'requested') && manual && (
+        {r.status === 'failed' && (
+          <div className="space-y-2">
+            <p className="text-sm text-critical-ink">The gateway refund failed. Try the gateway again, or pay the customer another way (e.g. DuitNow) and record it below.</p>
+            <Button size="sm" variant="secondary" disabled={decide.isPending} onClick={() => decide.mutate({ action: 'retry' })}>
+              Retry through the gateway
+            </Button>
+          </div>
+        )}
+        {((r.status === 'approved' || r.status === 'requested') && manual) || r.status === 'failed' ? (
           <form
             className="mt-3 flex flex-wrap items-end gap-2"
             onSubmit={(e) => {
@@ -151,9 +159,8 @@ function RefundCard({ r }: { r: RefundRow }) {
               Mark paid
             </Button>
           </form>
-        )}
+        ) : null}
         {r.status === 'approved' && !manual && <p className="text-sm text-ink-2">Approved — being paid back to the original payment by the gateway.</p>}
-        {r.status === 'failed' && <p className="text-sm text-critical-ink">The gateway refund failed. Pay by DuitNow or cash and create a new refund for the record.</p>}
         <MutationError error={decide.error} />
       </div>
     </Card>

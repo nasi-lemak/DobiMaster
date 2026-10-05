@@ -45,6 +45,17 @@ export async function requestPasswordReset(ctx: Ctx, email: string) {
 /** Set a new password from a reset link; signs out every device. */
 export async function resetPassword(ctx: Ctx, token: string, next: string) {
   const now = ctx.now();
+  // Check the new password before using up the link, so a rejected password doesn't burn it.
+  const pending = await ctx.db
+    .selectFrom('password_resets as r')
+    .innerJoin('users as u', 'u.id', 'r.user_id')
+    .select('u.email')
+    .where('r.token_hash', '=', sha256(token))
+    .where('r.used_at', 'is', null)
+    .where('r.expires_at', '>', now)
+    .executeTakeFirst();
+  if (!pending) throw badRequest('This reset link has expired or was already used. Ask for a new one.');
+  checkStrength(next, pending.email);
   const row = await ctx.db
     .updateTable('password_resets')
     .set({ used_at: now })
@@ -54,8 +65,6 @@ export async function resetPassword(ctx: Ctx, token: string, next: string) {
     .returning('user_id')
     .executeTakeFirst();
   if (!row) throw badRequest('This reset link has expired or was already used. Ask for a new one.');
-  const u = await ctx.db.selectFrom('users').select('email').where('id', '=', row.user_id).executeTakeFirstOrThrow();
-  checkStrength(next, u.email);
   await ctx.db.updateTable('users').set({ password_hash: await hashPassword(next), password_changed_at: now }).where('id', '=', row.user_id).execute();
   // Any other outstanding reset links for this user die too.
   await ctx.db.updateTable('password_resets').set({ used_at: now }).where('user_id', '=', row.user_id).where('used_at', 'is', null).execute();

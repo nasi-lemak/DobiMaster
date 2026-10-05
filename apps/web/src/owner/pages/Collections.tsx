@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { api } from '../../lib/api';
+import { api, uuid } from '../../lib/api';
 import { Button, Card, cx, EmptyState, Field, inputClass } from '../../components/ui';
 import { dateTime } from '../../lib/format';
 import { MutationError, PageHeader, QueryState, Section, ShopSelect, StatusTag, TableWrap, td, th } from '../components/common';
@@ -65,6 +65,8 @@ function RecordForm({ defaultShopId, onDone, onCancel }: { defaultShopId: string
   const [at, setAt] = useState(localNow);
   const [note, setNote] = useState('');
   const [lines, setLines] = useState<Record<string, { amount: string; counter: string }>>({});
+  // One id per form: a retried Save (lost response on shop Wi-Fi) can't record the same cash twice.
+  const [collectionId] = useState(uuid);
   const machines = useApi<{ machines: OwnerMachine[] }>(k.machines(shopId), `/owner/machines${qs({ shopId })}`, { enabled: !!shopId });
   const entered = Object.entries(lines).filter(([, l]) => l.amount.trim() !== '');
   const invalid = entered.some(([, l]) => parseRm(l.amount) == null || (l.counter.trim() !== '' && !/^\d+$/.test(l.counter.trim())));
@@ -74,6 +76,7 @@ function RecordForm({ defaultShopId, onDone, onCancel }: { defaultShopId: string
   const save = useApiMutation(
     () =>
       api.post('/owner/collections', {
+        id: collectionId,
         shopId,
         collectedAt: new Date(at).toISOString(),
         note: note.trim() || null,

@@ -12,8 +12,11 @@ test('customer: home → shop → machine → start timer → countdown; report 
   await page.getByRole('link').filter({ has: page.getByRole('heading', { name: shop.name }) }).click();
   await expect(page.getByRole('heading', { level: 1, name: shop.name })).toBeVisible();
 
-  await page.getByRole('link').filter({ hasText: machine.code }).click();
-  await expect(page).toHaveURL(new RegExp(`/m/${machine.qrToken}$`));
+  // The shop page shows every machine's status but no QR tokens: timers need the sticker on the machine.
+  await expect(page.getByRole('main').getByText(machine.code, { exact: true })).toBeVisible();
+  await expect(page.getByRole('link').filter({ hasText: machine.code })).toHaveCount(0);
+  await expect(page.getByText(/scan the QR sticker on the machine/)).toBeVisible();
+  await page.goto(`/m/${machine.qrToken}`); // = scanning the sticker
   await expect(page.getByRole('heading', { level: 1, name: machine.code })).toBeVisible();
 
   await page.getByRole('button', { name: /I’ve started it/ }).click();

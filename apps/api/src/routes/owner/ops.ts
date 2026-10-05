@@ -70,8 +70,11 @@ export async function ownerOpsRoutes(app: FastifyInstance, ctx: Ctx) {
       ctx.db.selectFrom('refunds').selectAll().where('ticket_id', '=', id).orderBy('created_at').execute(),
       t.cycle_id ? ctx.db.selectFrom('cycles').select(['id', 'status', 'started_at', 'ended_at', 'source', 'sensor_confirmed', 'program_name']).where('id', '=', t.cycle_id).executeTakeFirst() : undefined,
     ]);
-    // Staff without refund permission don't see the customer's phone number.
-    const ticket = can(o, 'refunds.decide') ? t : { ...t, contact_phone: t.contact_phone ? '••••' + t.contact_phone.slice(-3) : null };
+    // Staff without refund permission don't see the customer's phone number, on the ticket or its refunds.
+    const full = can(o, 'refunds.decide');
+    const mask = (phone: string | null) => (phone ? '••••' + phone.slice(-3) : null);
+    const ticket = full ? t : { ...t, contact_phone: mask(t.contact_phone) };
+    const refundsShown = full ? refunds : refunds.map((r) => ({ ...r, payout_phone: mask(r.payout_phone) }));
     const photos = await ctx.db.selectFrom('attachments').select(['id', 'content_type', 'created_at']).where('ticket_id', '=', id).orderBy('created_at').execute();
     return {
       ticket,
@@ -79,7 +82,7 @@ export async function ownerOpsRoutes(app: FastifyInstance, ctx: Ctx) {
       shop,
       machine: machine ?? null,
       payment: payment ?? null,
-      refunds,
+      refunds: refundsShown,
       cycle: cycle ?? null,
       photos: photos.map((p) => ({ id: p.id, url: attachmentUrl(p.id), createdAt: p.created_at.toISOString() })),
     };
@@ -151,13 +154,10 @@ export async function ownerOpsRoutes(app: FastifyInstance, ctx: Ctx) {
         note: z.string().max(500).nullable().optional(),
       })
       .parse(req.body);
-    // Check access to the shop the ticket/payment belongs to *before* creating anything.
-    const source = b.ticketId
-      ? await ctx.db.selectFrom('tickets').select('shop_id').where('id', '=', b.ticketId).where('tenant_id', '=', o.tenantId).executeTakeFirst()
-      : b.paymentId
-        ? await ctx.db.selectFrom('payments').select('shop_id').where('id', '=', b.paymentId).where('tenant_id', '=', o.tenantId).executeTakeFirst()
-        : undefined;
-    if (source) await assertShopAccess(ctx, o, source.shop_id);
+    // Check access to every shop the ticket and payment belong to *before* creating anything.
+    const ticket = b.ticketId ? await ctx.db.selectFrom('tickets').select('shop_id').where('id', '=', b.ticketId).where('tenant_id', '=', o.tenantId).executeTakeFirst() : undefined;
+    const payment = b.paymentId ? await ctx.db.selectFrom('payments').select('shop_id').where('id', '=', b.paymentId).where('tenant_id', '=', o.tenantId).executeTakeFirst() : undefined;
+    for (const source of [ticket, payment]) if (source) await assertShopAccess(ctx, o, source.shop_id);
     const r = await requestRefund(ctx, { ...b, tenantId: o.tenantId, actorId: o.userId });
     await audit(ctx, actorOf(req), 'refund.create', 'refund', r.id, undefined, b);
     return { refund: r };
@@ -166,7 +166,7 @@ export async function ownerOpsRoutes(app: FastifyInstance, ctx: Ctx) {
   app.post('/owner/refunds/:id/decision', async (req) => {
     const o = requirePerm(req, 'refunds.decide');
     const { id } = z.object({ id: uuid }).parse(req.params);
-    const b = z.object({ action: z.enum(['approve', 'reject', 'mark_paid']), reference: z.string().max(100).nullable().optional(), note: z.string().max(500).nullable().optional() }).parse(req.body);
+    const b = z.object({ action: z.enum(['approve', 'reject', 'mark_paid', 'retry']), reference: z.string().max(100).nullable().optional(), note: z.string().max(500).nullable().optional() }).parse(req.body);
     const before = await ctx.db.selectFrom('refunds').selectAll().where('id', '=', id).where('tenant_id', '=', o.tenantId).executeTakeFirst();
     if (!before) throw notFound('Refund');
     await assertShopAccess(ctx, o, before.shop_id);
@@ -185,7 +185,7 @@ export async function ownerOpsRoutes(app: FastifyInstance, ctx: Ctx) {
       .selectFrom('collections as c')
       .innerJoin('shops as s', 's.id', 'c.shop_id')
       .leftJoin('users as u', 'u.id', 'c.collected_by')
-      .select(['c.id', 'c.shop_id', 'c.collected_at', 'c.note', 's.name as shop_name', 'u.name as collected_by_name'])
+      .select(['c.id', 'c.shop_id', 'c.collected_at', 'c.collected_by', 'c.note', 's.name as shop_name', 'u.name as collected_by_name'])
       .where('c.shop_id', 'in', ids)
       .orderBy('c.collected_at', 'desc')
       .limit(100)
@@ -206,7 +206,7 @@ export async function ownerOpsRoutes(app: FastifyInstance, ctx: Ctx) {
           ...c,
           // Staff see only what they entered structurally, not totals over time.
           totalSen: showMoney ? ls.reduce((s, l) => s + l.amount_sen, 0) : null,
-          lines: ls.map((l) => ({ ...l, amount_sen: showMoney || c.collected_by_name === o.name ? l.amount_sen : null })),
+          lines: ls.map((l) => ({ ...l, amount_sen: showMoney || c.collected_by === o.userId ? l.amount_sen : null })),
         };
       }),
     };
@@ -216,6 +216,7 @@ export async function ownerOpsRoutes(app: FastifyInstance, ctx: Ctx) {
     const o = requirePerm(req, 'collections.create');
     const b = z
       .object({
+        id: uuid.optional(),
         shopId: uuid,
         collectedAt: z.string().datetime().optional(),
         note: z.string().max(500).nullable().optional(),
@@ -223,7 +224,18 @@ export async function ownerOpsRoutes(app: FastifyInstance, ctx: Ctx) {
       })
       .parse(req.body);
     await assertShopAccess(ctx, o, b.shopId);
-    const c = await recordCollection(ctx, { ...b, collectedAt: b.collectedAt ? new Date(b.collectedAt) : undefined, tenantId: o.tenantId, userId: o.userId });
+    // Reconciliation compares cash with use *between* collections, so staff can't move a collection in time
+    // (backdating would hide a shortfall). Owners/managers can record a past collection within 30 days.
+    let collectedAt = b.collectedAt ? new Date(b.collectedAt) : undefined;
+    if (collectedAt) {
+      const now = ctx.now().getTime();
+      const maxBack = (can(o, 'revenue.view') ? 30 * 24 : 0) * 3600_000;
+      if (collectedAt.getTime() > now + 5 * 60_000 || collectedAt.getTime() < now - maxBack - 5 * 60_000) {
+        if (!can(o, 'revenue.view')) collectedAt = undefined; // staff: always "now"
+        else throw badRequest('Collection time must be within the last 30 days');
+      }
+    }
+    const c = await recordCollection(ctx, { ...b, collectedAt, tenantId: o.tenantId, userId: o.userId });
     await audit(ctx, actorOf(req), 'collection.create', 'collection', c.id, undefined, b);
     return { collection: c };
   });

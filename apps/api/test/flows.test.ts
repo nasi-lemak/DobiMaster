@@ -82,8 +82,12 @@ describe('sensor-observed machine', () => {
     expect(res.json().cycle.id).toBe(sensorCycle); // merged, not a second cycle
     expect(res.json().cycle.durationMin).toBe(40);
 
-    // The sensor, not the timer, decides the end.
-    h.clock.advance(44);
+    // The sensor, not the timer, decides the end. (A running sensor keeps reporting, every 10 s for real.)
+    for (let i = 0; i < 4; i++) {
+      h.clock.advance(11);
+      await telemetry(f.sensored.token, [{ ts: h.clock.now.getTime(), powerW: 450 }]);
+    }
+    h.clock.advance(1);
     const t1 = h.clock.now.getTime();
     await telemetry(f.sensored.token, [{ ts: t1, powerW: 2 }, { ts: t1 + 61_000, powerW: 2 }]);
     st = await machineState(h, f.sensored.id);

@@ -62,6 +62,7 @@ function useOwnerRealtime(tenantId: string) {
           inv('overview', 'tickets', 'ticket', 'machine');
           break;
         case 'alert.created':
+        case 'alert.updated':
         case 'alert.resolved':
           inv('overview', 'alerts');
           break;

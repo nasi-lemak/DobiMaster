@@ -21,12 +21,17 @@ export async function sweepPrivacy(ctx: Ctx) {
     .where('status', 'in', ['resolved', 'rejected'])
     .where('resolved_at', '<', phoneCutoff)
     .executeTakeFirst();
+  // Settled refunds (paid, rejected, or failed and left), and any refund on a report closed long ago.
   const refunds = await ctx.db
     .updateTable('refunds')
     .set({ payout_phone: null })
     .where('payout_phone', 'is not', null)
-    .where('status', 'in', ['paid', 'rejected'])
-    .where(sql<Date>`coalesce(paid_at, decided_at)`, '<', phoneCutoff)
+    .where((eb) =>
+      eb.or([
+        eb.and([eb('status', 'in', ['paid', 'rejected', 'failed']), eb(sql<Date>`coalesce(paid_at, decided_at, created_at)`, '<', phoneCutoff)]),
+        eb.exists(eb.selectFrom('tickets as t').select('t.id').whereRef('t.id', '=', 'refunds.ticket_id').where('t.status', 'in', ['resolved', 'rejected']).where('t.resolved_at', '<', phoneCutoff)),
+      ]),
+    )
     .executeTakeFirst();
 
   const photos = await ctx.db
@@ -62,14 +67,20 @@ export async function eraseCustomer(ctx: Ctx, customerId: string) {
   return ctx.db.transaction().execute(async (trx) => {
     const c = await trx.selectFrom('customers').select('id').where('id', '=', customerId).forUpdate().executeTakeFirst();
     if (!c) return null;
+    // A phone/browser can also belong to an owner account: keep their WhatsApp link and push alerts, just unlink the guest.
+    await trx.updateTable('wa_contacts').set({ customer_id: null }).where('customer_id', '=', customerId).where('user_id', 'is not', null).execute();
+    await trx.updateTable('push_subscriptions').set({ customer_id: null }).where('customer_id', '=', customerId).where('user_id', 'is not', null).execute();
     const wa = await trx.selectFrom('wa_contacts').select('wa_id').where('customer_id', '=', customerId).execute();
     if (wa.length) await trx.deleteFrom('wa_messages').where('wa_id', 'in', wa.map((w) => w.wa_id)).execute();
 
     const tickets = await trx.selectFrom('tickets').select(['id', 'status', 'contact_phone']).where('customer_id', '=', customerId).execute();
     const closed = tickets.filter((t) => t.status === 'resolved' || t.status === 'rejected').map((t) => t.id);
-    if (closed.length) {
-      await trx.updateTable('tickets').set({ contact_phone: null }).where('id', 'in', closed).execute();
-      await trx.updateTable('refunds').set({ payout_phone: null }).where('ticket_id', 'in', closed).where('status', 'in', ['paid', 'rejected']).execute();
+    if (closed.length) await trx.updateTable('tickets').set({ contact_phone: null }).where('id', 'in', closed).execute();
+    // Refund phone numbers: drop all except those still needed to pay a refund that is open.
+    const payments = await trx.selectFrom('payments').select('id').where('customer_id', '=', customerId).execute();
+    const refundScope = [...tickets.map((t) => ['ticket_id', t.id] as const), ...payments.map((p) => ['payment_id', p.id] as const)];
+    for (const [col, id] of refundScope) {
+      await trx.updateTable('refunds').set({ payout_phone: null }).where(col, '=', id).where('status', 'in', ['paid', 'rejected', 'failed']).execute();
     }
     const openWithPhone = tickets.filter((t) => !closed.includes(t.id) && t.contact_phone).length;
 

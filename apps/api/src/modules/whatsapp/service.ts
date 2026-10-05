@@ -79,8 +79,10 @@ export function createWhatsAppTransport(): WhatsAppTransport {
 export function verifyWebhookSignature(rawBody: string, header: string | undefined): boolean {
   if (!config.whatsapp.appSecret) return false;
   const expected = 'sha256=' + createHmac('sha256', config.whatsapp.appSecret).update(rawBody).digest('hex');
-  const got = header ?? '';
-  return got.length === expected.length && timingSafeEqual(Buffer.from(got), Buffer.from(expected));
+  // Compare bytes, not characters: a non-ASCII header has a different byte length and would make timingSafeEqual throw.
+  const got = Buffer.from(header ?? '');
+  const want = Buffer.from(expected);
+  return got.length === want.length && timingSafeEqual(got, want);
 }
 
 type Loc = 'en' | 'ms' | 'zh';

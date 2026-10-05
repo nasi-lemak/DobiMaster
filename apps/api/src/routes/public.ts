@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { LEGAL_VERSION, PRIVACY_RETENTION, TICKET_CATEGORIES } from '@dobi/shared';
 import { config } from '../config.js';
 import { eraseCustomer } from '../modules/privacy/service.js';
+import { isAllowedPushEndpoint, MAX_PUSH_SUBSCRIPTIONS_PER_CUSTOMER } from '../modules/push/service.js';
 import type { Ctx } from '../context.js';
 import { json } from '../db/index.js';
 import { createGuest, customerFromRequest } from '../auth/guest.js';
@@ -173,20 +174,34 @@ export async function publicRoutes(app: FastifyInstance, ctx: Ctx) {
   // ---- push ----
   app.get('/public/push/vapid-key', async () => ({ publicKey: ctx.vapidPublicKey }));
 
-  app.post('/public/push/subscribe', async (req) => {
+  app.post('/public/push/subscribe', { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } }, async (req) => {
     const customerId = await customerFromRequest(ctx, req, true);
     const body = z
       .object({
-        endpoint: z.string().url().max(1000),
+        endpoint: z.string().url().max(1000).refine(isAllowedPushEndpoint, 'Not a browser push service'),
         keys: z.object({ p256dh: z.string().max(200), auth: z.string().max(100) }),
         locale: z.string().max(5).optional(),
       })
       .parse(req.body);
+    // Same browser as an owner's? Keep the owner's subscription too (one row can serve both).
     await ctx.db
       .insertInto('push_subscriptions')
       .values({ customer_id: customerId, endpoint: body.endpoint, keys: json(body.keys), locale: body.locale ?? 'en' })
-      .onConflict((oc) => oc.column('endpoint').doUpdateSet({ customer_id: customerId, user_id: null, keys: json(body.keys), locale: body.locale ?? 'en', failed_count: 0 }))
+      .onConflict((oc) => oc.column('endpoint').doUpdateSet({ customer_id: customerId, keys: json(body.keys), locale: body.locale ?? 'en', failed_count: 0 }))
       .execute();
+    const extra = await ctx.db
+      .selectFrom('push_subscriptions')
+      .select('id')
+      .where('customer_id', '=', customerId)
+      .orderBy('created_at', 'desc')
+      .offset(MAX_PUSH_SUBSCRIPTIONS_PER_CUSTOMER)
+      .limit(100)
+      .execute();
+    if (extra.length) {
+      const ids = extra.map((e) => e.id);
+      await ctx.db.deleteFrom('push_subscriptions').where('id', 'in', ids).where('user_id', 'is', null).execute();
+      await ctx.db.updateTable('push_subscriptions').set({ customer_id: null }).where('id', 'in', ids).execute();
+    }
     if (body.locale) await ctx.db.updateTable('customers').set({ locale: body.locale }).where('id', '=', customerId).execute();
     return { ok: true };
   });

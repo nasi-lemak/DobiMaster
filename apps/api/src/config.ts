@@ -18,10 +18,14 @@ function env(name: string, fallback?: string): string {
 
 const isProd = process.env.NODE_ENV === 'production';
 
-/** TRUST_PROXY: "true"/"false", a hop count ("1" = one reverse proxy such as Caddy), or comma-separated proxy IPs/CIDRs. */
+/**
+ * TRUST_PROXY: a hop count ("1" = one reverse proxy such as Caddy), comma-separated proxy IPs/CIDRs, "true"
+ * (trust any X-Forwarded-For: only safe if nothing can reach the app directly) or "false" (the default:
+ * use the connection's address, so clients can't fake their IP to dodge rate limits).
+ */
 function trustProxy(raw: string | undefined): boolean | string[] | ((addr: string, hop: number) => boolean) {
-  if (raw === undefined || raw === '' || raw === 'true') return true;
-  if (raw === 'false') return false;
+  if (raw === undefined || raw === '' || raw === 'false') return false;
+  if (raw === 'true') return true;
   if (/^\d+$/.test(raw)) {
     const hops = Number(raw);
     return (_addr: string, hop: number) => hop < hops; // trust only the nearest N proxies
@@ -104,6 +108,7 @@ export function productionWarnings(c: typeof config = config): string[] {
   const w: string[] = [];
   if (!c.legal.operatorName || !c.legal.contactEmail)
     w.push('LEGAL_OPERATOR_NAME and LEGAL_CONTACT_EMAIL are not set: the privacy notice will show "[not set]" (required under the PDPA).');
+  if (!process.env.TRUST_PROXY) w.push('TRUST_PROXY is not set: behind a reverse proxy every visitor shares one IP for rate limits. Set TRUST_PROXY=1 behind Caddy (deploy/ does this).');
   if (!c.smtpUrl) w.push('SMTP_URL is not set: password-reset and weekly-summary emails are only logged, not sent.');
   return w;
 }

@@ -54,10 +54,32 @@ export interface Sample {
   powerW: number;
 }
 
+/**
+ * Readings this far apart mean the sensor was off (power cut, unplugged, no Wi-Fi): a running sensor reports
+ * every ~10 s and the Shelly script buffers ~10 min. What happened in between is unknown, so:
+ *  - if the machine is idle when readings resume, the cycle ended while we weren't looking: end it at the
+ *    last moment it was seen running (instead of calling it "stuck" hours later);
+ *  - if it is still drawing power, carry on, but don't count energy across the gap.
+ */
+export const GAP_RESET_MS = 15 * 60_000;
+
 export function step(state: DetectorState, sample: Sample, cfg: DetectorConfig): { state: DetectorState; events: DetectorEvent[] } {
   const s = { ...state };
   const events: DetectorEvent[] = [];
   if (s.lastTs !== null && sample.ts <= s.lastTs) return { state: s, events }; // out-of-order or duplicate
+  const gap = s.lastTs !== null && sample.ts - s.lastTs > GAP_RESET_MS;
+  if (gap && s.phase === 'idle') s.aboveSince = null;
+  if (gap && s.phase === 'running') {
+    if (sample.powerW < cfg.endW) {
+      const startedAt = s.cycleStart!;
+      const endedAt = s.belowSince ?? s.lastTs!;
+      // Not a "blip": it was still running when we lost sight of it, so it ran at least this long.
+      const durSec = (endedAt - startedAt) / 1000;
+      events.push({ type: 'cycle_ended', at: endedAt, startedAt, avgPowerW: durSec > 0 ? s.energyWs / durSec : 0 });
+      return { state: { ...initialDetectorState(), lastTs: sample.ts, lastPowerW: sample.powerW }, events };
+    }
+    s.lastPowerW = null; // still running: skip energy for the unseen gap
+  }
 
   if (s.phase === 'running' && s.lastTs !== null && s.lastPowerW !== null) {
     s.energyWs += s.lastPowerW * ((sample.ts - s.lastTs) / 1000);

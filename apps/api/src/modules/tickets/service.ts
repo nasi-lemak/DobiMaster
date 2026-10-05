@@ -3,7 +3,7 @@ import type { Ctx } from '../../context.js';
 import { json } from '../../db/index.js';
 import type { Ticket } from '../../db/types.js';
 import { channels } from '../../events/bus.js';
-import { conflict, notFound } from '../../lib/errors.js';
+import { badRequest, conflict, notFound } from '../../lib/errors.js';
 import { raiseAlert } from '../alerts/service.js';
 import { recomputeMachineState } from '../machines/state.js';
 import { machineEvidence } from '../telemetry/service.js';
@@ -68,7 +68,8 @@ export async function createCustomerReport(ctx: Ctx, input: CustomerReportInput)
     shopId = machine.shop_id;
     tenantId = machine.tenant_id;
   } else {
-    const shop = await ctx.db.selectFrom('shops').select(['id', 'tenant_id']).where('slug', '=', input.shopSlug ?? '').executeTakeFirst();
+    // Reports by shop name only for live shops (slugs are guessable; machine QR tokens are not).
+    const shop = await ctx.db.selectFrom('shops').select(['id', 'tenant_id']).where('slug', '=', input.shopSlug ?? '').where('is_published', '=', true).executeTakeFirst();
     if (!shop) throw notFound('Shop');
     shopId = shop.id;
     tenantId = shop.tenant_id;
@@ -157,8 +158,15 @@ export interface StaffTicketInput {
   assignedTo?: string | null;
 }
 
+/** A ticket can only be assigned to a member of the same business who can see that shop. */
+async function assertAssignable(ctx: Ctx, tenantId: string, shopId: string, userId: string) {
+  const m = await ctx.db.selectFrom('memberships').select('shop_ids').where('tenant_id', '=', tenantId).where('user_id', '=', userId).executeTakeFirst();
+  if (!m || (m.shop_ids && !m.shop_ids.includes(shopId))) throw badRequest('That person can’t be assigned tickets for this shop');
+}
+
 export async function createStaffTicket(ctx: Ctx, input: StaffTicketInput) {
   const now = ctx.now();
+  if (input.assignedTo) await assertAssignable(ctx, input.tenantId, input.shopId, input.assignedTo);
   const machine = input.machineId
     ? await ctx.db.selectFrom('machines').select(['code', 'shop_id']).where('id', '=', input.machineId).where('tenant_id', '=', input.tenantId).executeTakeFirst()
     : null;
@@ -183,7 +191,18 @@ export async function createStaffTicket(ctx: Ctx, input: StaffTicketInput) {
     .onConflict((oc) => oc.column('id').doNothing())
     .returningAll()
     .executeTakeFirst();
-  const t = ticket ?? (await ctx.db.selectFrom('tickets').selectAll().where('id', '=', input.id).executeTakeFirstOrThrow());
+  // An existing id is only an idempotent retry if it's this person's own ticket; never return anyone else's.
+  const t =
+    ticket ??
+    (await ctx.db
+      .selectFrom('tickets')
+      .selectAll()
+      .where('id', '=', input.id)
+      .where('tenant_id', '=', input.tenantId)
+      .where('shop_id', '=', input.shopId)
+      .where('created_by', '=', input.userId)
+      .executeTakeFirst());
+  if (!t) throw conflict('id_taken', 'Ticket id already used');
   if (ticket) {
     await ctx.db.insertInto('ticket_events').values({ ticket_id: t.id, actor_id: input.userId, kind: 'created', body: t.details, created_at: now }).execute();
     await afterTicketChange(ctx, t, false);
@@ -293,6 +312,7 @@ export async function updateTicket(ctx: Ctx, tenantId: string, ticketId: string,
     events.push({ kind: 'severity', data: { from: t.severity, to: patch.severity } });
   }
   if (patch.assignedTo !== undefined && patch.assignedTo !== t.assigned_to) {
+    if (patch.assignedTo) await assertAssignable(ctx, tenantId, t.shop_id, patch.assignedTo);
     set.assigned_to = patch.assignedTo;
     events.push({ kind: 'assign', data: { to: patch.assignedTo } });
   }

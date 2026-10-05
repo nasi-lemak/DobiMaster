@@ -50,6 +50,22 @@ export const shellyAdapter: ObservationAdapter = {
   },
 };
 
+/** Device clocks can't be trusted: a reading may be at most this far ahead of the server, or this old. */
+export const MAX_FUTURE_SKEW_MS = 5 * 60_000;
+export const MAX_SAMPLE_AGE_MS = 2 * 3600_000;
+
+/**
+ * Re-stamp readings with impossible times (garbage, or ahead of the server, e.g. a bad RTC or seconds/ms
+ * mix-up) with the receive time, and drop readings too old to matter. One future-dated sample would
+ * otherwise blind the detector, which ignores anything older than the last reading it saw.
+ */
+export function sanitizeSamples(samples: Sample[], receivedAt: Date): Sample[] {
+  const now = receivedAt.getTime();
+  return samples
+    .map((s) => (!Number.isFinite(s.ts) || s.ts > now + MAX_FUTURE_SKEW_MS ? { ...s, ts: now } : s))
+    .filter((s) => s.ts >= now - MAX_SAMPLE_AGE_MS && Number.isFinite(s.powerW));
+}
+
 export const adapters: Record<string, ObservationAdapter> = {
   generic_power: genericPowerAdapter,
   esp32_ct: genericPowerAdapter,
