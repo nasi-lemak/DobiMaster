@@ -53,6 +53,7 @@ export function ShopPage() {
   const mapsUrl = s.lat != null ? `https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.address)}`;
   const wazeUrl = s.lat != null ? `https://waze.com/ul?ll=${s.lat},${s.lng}&navigate=yes` : null;
   const days = DAY_NAMES[locale] ?? DAY_NAMES.en!;
+  const hasFacilities = s.machines.some((m) => m.detergentAuto) || Object.values(s.facilities).some(Boolean);
 
   return (
     <div className="space-y-4">
@@ -64,9 +65,11 @@ export function ShopPage() {
           {s.openNow && s.closesAt && <span className="text-muted"> · {t('closesAt', { time: s.closesAt })}</span>}
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <a href={mapsUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-medium">
-            🧭 {t('directions')}
-          </a>
+          {(s.lat != null || s.address.trim() !== '') && (
+            <a href={mapsUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-medium">
+              🧭 {t('directions')}
+            </a>
+          )}
           {wazeUrl && (
             <a href={wazeUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-medium">
               Waze
@@ -143,18 +146,23 @@ export function ShopPage() {
         </Card>
       )}
 
+      {(hasFacilities || !s.open24h) && (
       <Card className="p-4">
-        <h2 className="mb-2 font-semibold">{t('facilities')}</h2>
-        <div className="flex flex-wrap gap-2">
-          {s.machines.some((m) => m.detergentAuto) && <Pill tone="good">🧴 {t('detergentAuto').split('—')[0]}</Pill>}
-          {Object.entries(s.facilities)
-            .filter(([, v]) => v)
-            .map(([k]) => (
-              <Pill key={k}>{t(`facility.${k}`)}</Pill>
-            ))}
-        </div>
+        {hasFacilities && (
+          <>
+            <h2 className="mb-2 font-semibold">{t('facilities')}</h2>
+            <div className="flex flex-wrap gap-2">
+              {s.machines.some((m) => m.detergentAuto) && <Pill tone="good">🧴 {t('detergentAuto').split('—')[0]}</Pill>}
+              {Object.entries(s.facilities)
+                .filter(([, v]) => v)
+                .map(([k]) => (
+                  <Pill key={k}>{t(`facility.${k}`)}</Pill>
+                ))}
+            </div>
+          </>
+        )}
         {!s.open24h && (
-          <table className="mt-3 w-full text-sm">
+          <table className={hasFacilities ? 'mt-3 w-full text-sm' : 'w-full text-sm'}>
             <tbody>
               {DAY_KEYS.map((d, i) => {
                 const h = s.openingHours[d];
@@ -169,6 +177,7 @@ export function ShopPage() {
           </table>
         )}
       </Card>
+      )}
 
       <Link to={`/s/${s.slug}/report`} className="block text-center text-sm text-muted underline underline-offset-2">
         ⚠ {t('reportProblem')}

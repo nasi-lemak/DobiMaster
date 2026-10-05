@@ -15,7 +15,7 @@ import { json, type DB } from '../../db/index.js';
 import { config } from '../../config.js';
 import { actorOf, assertShopAccess, hashPassword, login, requireOwner, requirePerm, setSessionCookie } from '../../auth/owner.js';
 import { checkStrength } from '../../auth/passwords.js';
-import { badRequest, conflict, notFound } from '../../lib/errors.js';
+import { AppError, badRequest, conflict, notFound } from '../../lib/errors.js';
 import { shortToken } from '../../lib/ids.js';
 import { audit } from '../../modules/audit/service.js';
 import { recomputeMachineState } from '../../modules/machines/state.js';
@@ -55,7 +55,19 @@ async function nextCodes(db: DB, shopId: string, prefix: 'W' | 'D', count: numbe
   return codes;
 }
 
-export async function onboardingRoutes(app: FastifyInstance, ctx: Ctx) {
+/** Whether a new business may sign up right now (SIGNUP_MODE). */
+export async function signupAllowed(db: DB, mode = config.signupMode) {
+  if (mode === 'open') return true;
+  if (mode === 'closed') return false;
+  return !(await db.selectFrom('tenants').select('id').limit(1).executeTakeFirst());
+}
+
+export async function onboardingRoutes(app: FastifyInstance, ctx: Ctx, opts: { signupMode?: typeof config.signupMode } = {}) {
+  const mode = () => opts.signupMode ?? config.signupMode;
+
+  /** Lets the sign-in page decide whether to offer "Create an account". */
+  app.get('/owner/auth/signup', async () => ({ allowed: await signupAllowed(ctx.db, mode()) }));
+
   /** Self-serve sign-up: a new business with you as its owner, signed in straight away. */
   app.post('/owner/auth/signup', { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } }, async (req, reply) => {
     const b = z
@@ -66,6 +78,7 @@ export async function onboardingRoutes(app: FastifyInstance, ctx: Ctx) {
         password: z.string().max(200),
       })
       .parse(req.body);
+    if (!(await signupAllowed(ctx.db, mode()))) throw new AppError(403, 'signup_closed', 'New sign-ups are closed on this server. Ask the operator for an account.');
     const email = b.email.toLowerCase();
     checkStrength(b.password, email);
     const exists = await ctx.db.selectFrom('users').select('id').where('email', '=', email).executeTakeFirst();

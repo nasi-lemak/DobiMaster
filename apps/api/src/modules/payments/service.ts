@@ -38,6 +38,7 @@ export function serializePayment(p: Payment) {
 export async function payBlocker(ctx: Ctx, machineId: string): Promise<string | null> {
   const m = await ctx.db.selectFrom('machines').selectAll().where('id', '=', machineId).executeTakeFirst();
   if (!m) return 'not_found';
+  if (ctx.gateway.name === 'none') return 'payments_disabled';
   if (m.control === 'none' || !ctx.controllers.get(m.control)) return 'not_controllable';
   if (m.observation === 'none') return 'not_observable'; // we must be able to confirm the start
   if (m.state !== 'available') return `machine_${m.state}`;

@@ -43,6 +43,8 @@ export interface BuildOptions {
   blobs?: BlobStore;
   gateway?: PaymentGateway;
   controllers?: ControllerRegistry;
+  /** Overrides SIGNUP_MODE (tests). */
+  signupMode?: 'open' | 'first' | 'closed';
   /** Start the background job loop and periodic sweeps (off in tests — they call jobs.runDue()). */
   runJobs?: boolean;
   logger?: boolean;
@@ -51,7 +53,7 @@ export interface BuildOptions {
 export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstance; ctx: Ctx }> {
   const app = Fastify({
     logger: opts.logger === false ? false : config.isProd ? true : { transport: { target: 'pino-pretty', options: { singleLine: true } } },
-    trustProxy: true,
+    trustProxy: config.trustProxy,
     bodyLimit: 256 * 1024,
   });
   const db = createDb(opts.pool);
@@ -115,7 +117,7 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
       await ownerShopRoutes(api, ctx);
       await ownerOpsRoutes(api, ctx);
       await ownerDigestRoutes(api, ctx);
-      await onboardingRoutes(api, ctx);
+      await onboardingRoutes(api, ctx, { signupMode: opts.signupMode });
       await api.register(async (scoped) => attachmentRoutes(scoped, ctx));
       await api.register(async (scoped) => whatsappRoutes(scoped, ctx));
       await api.register(async (hooks) => webhookRoutes(hooks, ctx));
@@ -129,7 +131,7 @@ export async function buildApp(opts: BuildOptions): Promise<{ app: FastifyInstan
   if (existsSync(webDist)) {
     await app.register(fastifyStatic, { root: webDist, wildcard: false });
     app.setNotFoundHandler((req, reply) => {
-      if (req.method === 'GET' && !req.url.startsWith('/api/')) return reply.sendFile('index.html');
+      if ((req.method === 'GET' || req.method === 'HEAD') && !req.url.startsWith('/api/')) return reply.sendFile('index.html');
       return reply.status(404).send({ error: 'not_found', message: 'Not found' });
     });
   }

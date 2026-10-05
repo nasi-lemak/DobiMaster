@@ -59,3 +59,23 @@ jobs:
         with:
           name: playwright-report
           path: apps/web/playwright-report
+
+  docker:
+    # Builds the production image and checks it boots against a real database.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t dobimaster:ci .
+      - name: Boot the image with production settings
+        run: |
+          docker network create ci
+          docker run -d --name db --network ci -e POSTGRES_USER=dobi -e POSTGRES_PASSWORD=dobi -e POSTGRES_DB=dobimaster postgres:16-alpine
+          for i in $(seq 1 30); do docker exec db pg_isready -U dobi && break; sleep 2; done
+          docker run -d --name app --network ci -p 3000:3000 \
+            -e DATABASE_URL=postgres://dobi:dobi@db:5432/dobimaster \
+            -e PUBLIC_URL=https://ci.example.my -e JWT_SECRET=$(openssl rand -hex 32) dobimaster:ci
+          for i in $(seq 1 30); do curl -fsS localhost:3000/health && break; sleep 2; done
+          curl -fsS localhost:3000/health
+          curl -fsS localhost:3000/owner | grep -q '<div id="root">'
+      - if: failure()
+        run: docker logs app || true

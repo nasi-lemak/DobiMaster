@@ -1,6 +1,6 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { config } from '../../config.js';
-import { unauthorized } from '../../lib/errors.js';
+import { AppError, unauthorized } from '../../lib/errors.js';
 
 export interface CreateChargeInput {
   paymentId: string;
@@ -81,8 +81,27 @@ export class MockGateway implements PaymentGateway {
   }
 }
 
+/** Pay-in-app switched off (no gateway contracted yet). Machines are never offered as payable. */
+export class DisabledGateway implements PaymentGateway {
+  name = 'none';
+  async createCharge(): Promise<never> {
+    throw new AppError(503, 'payments_disabled', 'Paying in the app isn’t available at this shop yet.');
+  }
+  parseWebhook(): GatewayEvent {
+    throw unauthorized('Payments are disabled');
+  }
+  async refund(): Promise<never> {
+    throw new Error('Payments are disabled: no gateway to refund through');
+  }
+  async getStatus() {
+    return 'failed' as const;
+  }
+}
+
 export function createGateway(name = config.paymentProvider): PaymentGateway {
   switch (name) {
+    case 'none':
+      return new DisabledGateway();
     case 'mock':
       return new MockGateway();
     default:

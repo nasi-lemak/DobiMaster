@@ -1,7 +1,13 @@
-import { config } from './config.js';
+import { assertProductionConfig, config } from './config.js';
 import { buildApp } from './app.js';
 import { createPool } from './db/index.js';
 import { migrate } from './db/migrate.js';
+
+const problems = assertProductionConfig();
+if (problems.length) {
+  console.error(`Refusing to start — fix these settings in .env:\n- ${problems.join('\n- ')}`);
+  process.exit(1);
+}
 
 const pool = createPool();
 await migrate(pool, (m) => console.log(m));

@@ -8,3 +8,6 @@ data/
 test-results/
 playwright-report/
 apps/web/e2e/.auth/
+
+# Production server: backups and data never go into git
+deploy/backups/

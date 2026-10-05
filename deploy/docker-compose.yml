@@ -1,0 +1,85 @@
+# Production: one small server running DobiMaster + Postgres + automatic HTTPS + nightly backups.
+# Run from this folder:  docker compose up -d --build      (see docs/DEPLOY.md)
+name: dobimaster
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: '10m', max-file: '5' } # keep logs from filling the disk
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dobi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+      POSTGRES_DB: dobimaster
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U dobi -d dobimaster']
+      interval: 5s
+      retries: 20
+    logging: *logging
+    # No ports: the database is reachable only by the app and backup containers.
+
+  app:
+    build:
+      context: ..
+      args:
+        VITE_SHOW_DEMO_LOGINS: ${SHOW_DEMO_LOGINS:-false}
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://dobi:${POSTGRES_PASSWORD}@db:5432/dobimaster
+      PUBLIC_URL: https://${DOMAIN:?set DOMAIN in deploy/.env}
+      TRUST_PROXY: '1' # exactly one proxy (Caddy) in front: rate limits see the real visitor IP
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - uploads:/data/uploads
+    logging: *logging
+    # No ports: only Caddy talks to the app.
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [app]
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in deploy/.env}
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # HTTPS certificates
+      - caddy_config:/config
+    logging: *logging
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    env_file: .env
+    environment:
+      PGHOST: db
+      PGUSER: dobi
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: dobimaster
+    volumes:
+      - ./scripts/backup.sh:/backup.sh:ro
+      - ./backups:/backups
+      - uploads:/data/uploads:ro
+    entrypoint: ['/bin/sh', '/backup.sh', 'loop']
+    logging: *logging
+
+volumes:
+  pgdata:
+  uploads:
+  caddy_data:
+  caddy_config:

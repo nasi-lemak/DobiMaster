@@ -23,6 +23,7 @@ For owners:
 | [docs/02-product.md](docs/02-product.md) | Features ranked MVP / Phase 2 / Phase 3, what **not** to build, wireframes for every screen |
 | [docs/03-architecture.md](docs/03-architecture.md) | Domain model, API, real-time events, IoT (observe vs. control), payments |
 | [docs/04-business.md](docs/04-business.md) | Competitor comparison, infrastructure cost (1/10/100 shops), pricing, risks, staged plan |
+| [docs/DEPLOY.md](docs/DEPLOY.md) | Putting it online: server, domain, HTTPS, backups, updates, restores |
 | [docs/INSTALL-sensors.md](docs/INSTALL-sensors.md) | What hardware to buy (home test kit, pilot shop); installer checklist: choosing Shelly models, DB/clamp installation, connecting, verifying a first cycle, troubleshooting |
 | [docs/research/competitor-research.md](docs/research/competitor-research.md) | Sourced market research: Malaysian QR retrofit vendors, chains, payment rails, complaints |
 
@@ -94,6 +95,7 @@ The integration tests cover:
 - RBAC and tenant isolation
 - cash reconciliation
 - sign-up and the setup wizard (codes continue across batches, go-live needs machines, tenant isolation)
+- production safety (refusing unsafe settings, sign-up modes, payments switched off)
 
 Browser end-to-end tests (Playwright, 28 tests) run on an isolated stack: database `dobimaster_e2e` (created with `createdb -O dobi dobimaster_e2e`), API on :3100 and web on :5180. The database is reseeded on every run.
 
@@ -103,14 +105,27 @@ pnpm --filter @dobi/web test:e2e
 
 ### Deploy
 
-`docker compose up --build` runs Postgres and one container that serves both the API and the built PWA on :3000. For production:
-- Put Caddy or Traefik in front for TLS.
-- Set `JWT_SECRET`, `PUBLIC_URL` and, optionally, VAPID keys.
-- Use managed Postgres (see the cost table in docs/04-business.md).
+**[docs/DEPLOY.md](docs/DEPLOY.md)** is the step-by-step guide to putting DobiMaster online on one rented server:
+- domain, server and DNS,
+- one setup command,
+- email, uptime alerts and backups,
+- updates and restores.
+
+The server bundle is in [`deploy/`](deploy): Docker Compose with Postgres, the app, Caddy (automatic HTTPS) and nightly backups, plus setup, update, backup and restore scripts.
+
+A production server refuses to start with unsafe settings:
+- a weak or example secret,
+- `http://` instead of HTTPS,
+- the free mock payment page.
+
+Pay-in-app is off by default (`PAYMENT_PROVIDER=none`) until a real gateway is connected. `SIGNUP_MODE` controls who can create a business account.
+
+`docker compose up --build` in the repo root runs the production image locally at http://localhost:3000.
 
 ## Repository layout
 
 ```
+deploy        Production server: Docker Compose, Caddy (HTTPS), backup/restore/update scripts
 apps/api      Fastify API, jobs, WebSocket hub, migrations (plain SQL), seed & simulator CLIs, tests
 apps/web      React + Vite + Tailwind PWA — src/customer (multilingual), src/owner (lazy-loaded dashboard)
 packages/shared  Domain enums, types, role→permission map shared by both

@@ -31,7 +31,7 @@ export interface Harness {
   close(): Promise<void>;
 }
 
-export async function createHarness(): Promise<Harness> {
+export async function createHarness(opts: { signupMode?: 'open' | 'first' | 'closed'; gateway?: import('../src/modules/payments/gateway.js').PaymentGateway } = {}): Promise<Harness> {
   const pool = createPool(process.env.DATABASE_URL);
   await migrate(pool, () => {});
   await pool.query(`TRUNCATE tenants, users, customers, jobs, app_settings, audit_log, wa_contacts, wa_link_codes, wa_messages, attachments RESTART IDENTITY CASCADE`);
@@ -43,11 +43,11 @@ export async function createHarness(): Promise<Harness> {
     },
   };
   const push = new MemoryPushTransport();
-  const gateway = new MockGateway();
+  const gateway = (opts.gateway ?? new MockGateway()) as MockGateway;
   const whatsapp = new MockWhatsAppTransport();
   const mail = new MemoryMailTransport();
   const blobs = new MemoryBlobStore();
-  const { app, ctx } = await buildApp({ pool, now: () => clock.now, pushTransport: push, gateway, whatsappTransport: whatsapp, mail, blobs, logger: false });
+  const { app, ctx } = await buildApp({ pool, now: () => clock.now, pushTransport: push, gateway, whatsappTransport: whatsapp, mail, blobs, logger: false, signupMode: opts.signupMode });
   return {
     app,
     ctx,

@@ -1,0 +1,20 @@
+# Caddy gets and renews the HTTPS certificate for $DOMAIN automatically (Let's Encrypt).
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Security headers for the web app.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(self), geolocation=(self), microphone=()"
+		-Server
+	}
+
+	# WebSockets (/ws) are proxied automatically.
+	reverse_proxy app:3000
+}

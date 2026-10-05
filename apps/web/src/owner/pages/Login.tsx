@@ -1,10 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api';
 import { Button, Field, inputClass } from '../../components/ui';
 import { MutationError } from '../components/common';
 import { k } from '../lib/queries';
+
+/** The seeded demo accounts exist only on dev and demo servers (VITE_SHOW_DEMO_LOGINS=true at build time). */
+const SHOW_DEMO_LOGINS = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_LOGINS === 'true';
 
 export function LoginPage() {
   const qc = useQueryClient();
@@ -13,6 +16,7 @@ export function LoginPage() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [forgot, setForgot] = useState<'off' | 'form' | 'sent'>('off');
+  const signup = useQuery({ queryKey: ['owner', 'signup-allowed'], queryFn: () => api.get<{ allowed: boolean }>('/owner/auth/signup'), staleTime: 5 * 60_000 });
 
   const sendReset = async (e: FormEvent) => {
     e.preventDefault();
@@ -89,12 +93,15 @@ export function LoginPage() {
           </button>
         </form>
         )}
-        <p className="mt-4 text-center text-sm">
-          New laundromat?{' '}
-          <Link to="/owner/signup" className="font-medium text-brand">
-            Create an account
-          </Link>
-        </p>
+        {signup.data?.allowed && (
+          <p className="mt-4 text-center text-sm">
+            New laundromat?{' '}
+            <Link to="/owner/signup" className="font-medium text-brand">
+              Create an account
+            </Link>
+          </p>
+        )}
+        {SHOW_DEMO_LOGINS && (
         <div className="mt-4 rounded-2xl bg-surface-2 p-3 text-xs text-ink-2">
           <p className="font-medium">Demo accounts (password demo1234)</p>
           <ul className="mt-1 space-y-0.5">
@@ -112,6 +119,7 @@ export function LoginPage() {
             </li>
           </ul>
         </div>
+        )}
       </div>
     </main>
   );

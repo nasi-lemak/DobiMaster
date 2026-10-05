@@ -1,4 +1,5 @@
-# Local/pilot deployment: Postgres + the app. For production put Caddy/Traefik in front for TLS.
+# Try the production image on your own computer: http://localhost:3000
+# For a real server use deploy/ (HTTPS, backups, secrets) — see docs/DEPLOY.md.
 services:
   db:
     image: postgres:16
@@ -20,7 +21,10 @@ services:
     environment:
       DATABASE_URL: postgres://dobi:dobi@db:5432/dobimaster
       PUBLIC_URL: http://localhost:3000
-      JWT_SECRET: change-me-to-a-long-random-string-change-me
+      JWT_SECRET: local-only-secret-not-for-any-real-server-0123456789
+      # Fake payment page, so you can click through pay & start locally.
+      PAYMENT_PROVIDER: mock
+      ALLOW_MOCK_PAYMENTS: 'true'
     ports:
       - '3000:3000'
 volumes:

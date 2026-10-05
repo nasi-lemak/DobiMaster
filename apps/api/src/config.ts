@@ -18,6 +18,20 @@ function env(name: string, fallback?: string): string {
 
 const isProd = process.env.NODE_ENV === 'production';
 
+/** TRUST_PROXY: "true"/"false", a hop count ("1" = one reverse proxy such as Caddy), or comma-separated proxy IPs/CIDRs. */
+function trustProxy(raw: string | undefined): boolean | string[] | ((addr: string, hop: number) => boolean) {
+  if (raw === undefined || raw === '' || raw === 'true') return true;
+  if (raw === 'false') return false;
+  if (/^\d+$/.test(raw)) {
+    const hops = Number(raw);
+    return (_addr: string, hop: number) => hop < hops; // trust only the nearest N proxies
+  }
+  return raw.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
+const signupMode = (process.env.SIGNUP_MODE ?? 'open') as 'open' | 'first' | 'closed';
+if (!['open', 'first', 'closed'].includes(signupMode)) throw new Error('SIGNUP_MODE must be open, first or closed');
+
 export const config = {
   isProd,
   isTest: process.env.NODE_ENV === 'test' || !!process.env.VITEST,
@@ -30,7 +44,12 @@ export const config = {
   vapidSubject: env('VAPID_SUBJECT', 'mailto:ops@dobimaster.local'),
   vapidPublicKey: process.env.VAPID_PUBLIC_KEY,
   vapidPrivateKey: process.env.VAPID_PRIVATE_KEY,
-  paymentProvider: env('PAYMENT_PROVIDER', 'mock'),
+  /** "none" disables pay-in-app. The mock gateway lets anyone "pay" for free, so production defaults to none. */
+  paymentProvider: env('PAYMENT_PROVIDER', isProd ? 'none' : 'mock'),
+  allowMockPaymentsInProduction: process.env.ALLOW_MOCK_PAYMENTS === 'true',
+  trustProxy: trustProxy(process.env.TRUST_PROXY),
+  /** open = anyone can create a business; first = only while no business exists (private install); closed = never. */
+  signupMode,
   /** Seconds to wait for sensor confirmation after a paid start before retry/refund. */
   startConfirmSec: Number(env('START_CONFIRM_SEC', '90')),
   jobPollMs: Number(env('JOB_POLL_MS', '1000')),
@@ -53,3 +72,16 @@ export const config = {
   smtpUrl: process.env.SMTP_URL,
   mailFrom: env('MAIL_FROM', 'DobiMaster <no-reply@dobimaster.local>'),
 };
+
+/** Refuse to boot a production server with settings that are unsafe on the public internet. */
+export function assertProductionConfig(c: typeof config = config): string[] {
+  if (!c.isProd) return [];
+  const errors: string[] = [];
+  if (c.jwtSecret.length < 32) errors.push('JWT_SECRET must be at least 32 characters (use: openssl rand -hex 32)');
+  if (/change-me|dev-only/i.test(c.jwtSecret)) errors.push('JWT_SECRET is still the example value');
+  const local = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(c.publicUrl); // trying the image on your own computer
+  if (!local && !/^https:\/\//.test(c.publicUrl)) errors.push(`PUBLIC_URL must be https:// in production (got ${c.publicUrl})`);
+  if (c.paymentProvider === 'mock' && !c.allowMockPaymentsInProduction)
+    errors.push('PAYMENT_PROVIDER=mock lets anyone start machines for free. Use PAYMENT_PROVIDER=none, or set ALLOW_MOCK_PAYMENTS=true for a demo server.');
+  return errors;
+}
