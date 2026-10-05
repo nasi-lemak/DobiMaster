@@ -20,7 +20,7 @@ const KEY = ['owner', 'sessions'] as const;
 /** Where am I signed in? Sign out a lost phone or a shared shop tablet without touching this device. */
 export function SecurityPage() {
   const q = useApi<{ sessions: SessionRow[] }>(KEY, '/owner/sessions');
-  const logout = useLogout();
+  const { logout, error: logoutError } = useLogout();
   const revoke = useApiMutation((id: string) => api.post(`/owner/sessions/${id}/revoke`), [KEY]);
   const others = useApiMutation(() => api.post<{ revoked: number }>('/owner/sessions/revoke-others'), [KEY]);
 
@@ -67,7 +67,15 @@ export function SecurityPage() {
                           </div>
                         </div>
                         {s.current ? (
-                          <ConfirmButton title="Log out on this device?" message="You'll need to sign in again here." confirmLabel="Log out" onConfirm={logout}>
+                          <ConfirmButton
+                            title="Log out on this device?"
+                            message="You'll need to sign in again here."
+                            confirmLabel="Log out"
+                            onConfirm={async () => {
+                              if (!(await logout())) throw new Error('logout failed'); // keep the dialog open
+                            }}
+                            error={logoutError ? new Error(logoutError) : null}
+                          >
                             Log out
                           </ConfirmButton>
                         ) : (

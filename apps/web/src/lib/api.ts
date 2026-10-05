@@ -27,14 +27,20 @@ let guestPromise: Promise<string> | null = null;
 export async function ensureGuest(locale = 'en'): Promise<string> {
   const existing = getGuestToken();
   if (existing) return existing;
-  guestPromise ??= request<{ token: string }>('POST', '/public/guest', { locale }).then((r) => {
-    try {
-      localStorage.setItem(GUEST_KEY, r.token);
-    } catch {
-      /* private mode: token lives for this page only */
-    }
-    return r.token;
-  });
+  guestPromise ??= request<{ token: string }>('POST', '/public/guest', { locale }).then(
+    (r) => {
+      try {
+        localStorage.setItem(GUEST_KEY, r.token);
+      } catch {
+        /* private mode: token lives for this page only */
+      }
+      return r.token;
+    },
+    (err) => {
+      guestPromise = null; // a dropped connection must not block every later attempt
+      throw err;
+    },
+  );
   return guestPromise;
 }
 

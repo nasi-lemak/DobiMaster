@@ -9,6 +9,9 @@ echo "== Pulling latest code"
 git -C .. pull --ff-only
 echo "== Rebuilding and restarting"
 docker compose up -d --build
+# Caddyfile and backup.sh are bind-mounted single files; a git pull replaces them, so recreate the
+# containers that use them to pick up the new versions.
+docker compose up -d --force-recreate caddy backup
 docker image prune -f >/dev/null
 echo "== Waiting for the app to report healthy"
 for i in $(seq 1 60); do

@@ -405,8 +405,14 @@ export async function sweepDigest(ctx: Ctx) {
       .returning('tenant_id')
       .executeTakeFirst();
     if (!claimed) continue;
-    const res = await deliverDigest(ctx, t.id, weekStart);
-    await ctx.db.updateTable('digest_log').set({ recipients: res.delivered }).where('tenant_id', '=', t.id).where('week_start', '=', weekStart).execute();
+    try {
+      const res = await deliverDigest(ctx, t.id, weekStart);
+      await ctx.db.updateTable('digest_log').set({ recipients: res.delivered }).where('tenant_id', '=', t.id).where('week_start', '=', weekStart).execute();
+    } catch (err) {
+      // Release the claim so the next hourly sweep retries this business, and carry on with the others.
+      ctx.log.error({ err, tenantId: t.id }, 'weekly summary failed');
+      await ctx.db.deleteFrom('digest_log').where('tenant_id', '=', t.id).where('week_start', '=', weekStart).execute();
+    }
   }
 }
 

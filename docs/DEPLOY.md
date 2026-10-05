@@ -76,9 +76,10 @@ deploy/scripts/setup-server.sh
 
 - **Private repository:** GitHub will ask for a username and password. Use your GitHub username and a **personal access token**, not your password. Create one at GitHub → Settings → Developer settings → Fine-grained tokens, with read-only access to this repository.
 
-The script asks two questions:
+The script asks three questions:
 1. Your domain (`app.yourdobi.my`).
 2. Your email, for HTTPS certificate notices.
+3. Your business name, shown in the privacy notice as the holder of customers' data.
 
 Then it does the rest:
 - Installs security updates and turns on automatic updates.
@@ -107,8 +108,12 @@ Who can create accounts is set by `SIGNUP_MODE` in `deploy/.env`:
 After changing any setting in `deploy/.env`, apply it:
 
 ```bash
-cd /opt/dobimaster/deploy && docker compose up -d
+cd /opt/dobimaster/deploy && docker compose up -d --build
 ```
+
+Two exceptions:
+- **Never change `POSTGRES_PASSWORD` after the first start.** The database keeps its original password, so the app and backups would be locked out.
+- **`SHOW_DEMO_LOGINS`** is built into the web app, which is why the command above includes `--build`.
 
 ## 6. Finish setup (recommended before the pilot)
 
@@ -136,12 +141,19 @@ All commands are run on the server, from `/opt/dobimaster/deploy`.
 | See what the app is doing | `docker compose logs --tail=100 app` |
 | Back up right now | `docker compose exec backup /bin/sh /backup.sh now` |
 | List backups | `ls -lh backups/` |
+| Did last night's backup work? | `cat backups/last-backup.txt`. It starts with `ok`, or with `FAILED` and the reason. |
 | Restore a backup | `scripts/restore.sh backups/db-YYYYMMDD-HHMMSS.dump backups/uploads-YYYYMMDD-HHMMSS.tar.gz` (asks you to type RESTORE) |
 | Restart everything | `docker compose restart` |
 
 **Backups:**
 - The database and customer photos are backed up every night at 3 am Malaysia time and kept for 14 days. Change this with `BACKUP_HOUR` (in UTC) and `BACKUP_KEEP_DAYS`.
+- A backup only counts as "ok" once the dump has been read back successfully. Old backups are deleted only after a new one succeeds, so a run of failures never removes your last good copies.
+- Check `backups/last-backup.txt` now and then. A failure is recorded there and in `docker compose logs backup`.
 - These backups are on the same server, so they protect against mistakes, not against losing the server. Your provider's backups (step 2) cover that.
+- **Restoring:**
+  - The restore script checks the files first and backs up the current data before replacing it.
+  - It restores the database all-or-nothing.
+  - It always starts the app again afterwards.
 - For extra safety, occasionally copy a backup to your own computer:
   ```bash
   scp root@203.0.113.10:/opt/dobimaster/deploy/backups/db-*.dump .

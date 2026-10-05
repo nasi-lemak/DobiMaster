@@ -82,6 +82,14 @@ export class JobQueue {
     await this.enqueuePeriodic();
     const now = this.now();
     const staleBefore = new Date(now.getTime() - 5 * 60_000);
+    // A job whose worker died mid-run is retried, but one that keeps killing workers must not loop forever.
+    await this.db
+      .updateTable('jobs')
+      .set({ status: 'failed', last_error: 'abandoned: the worker stopped while running it, 5 times', updated_at: now })
+      .where('status', '=', 'running')
+      .where('updated_at', '<', staleBefore)
+      .where('attempts', '>=', 5)
+      .execute();
     const claimed = await sql<{ id: string; kind: string; payload: Record<string, any>; attempts: number; run_at: Date }>`
       UPDATE jobs SET status = 'running', attempts = attempts + 1, updated_at = ${now}
       WHERE id IN (

@@ -82,7 +82,8 @@ The demo covers three realities:
 ### Tests
 
 ```bash
-pnpm --filter @dobi/api test      # unit + integration tests against dobimaster_test
+pnpm --filter @dobi/api test              # unit + integration tests against dobimaster_test (134 tests)
+pnpm --filter @dobi/api test:coverage     # the same, with a coverage summary (about 87% of lines)
 pnpm -r typecheck
 ```
 
@@ -98,6 +99,9 @@ The integration tests cover:
 - cash reconciliation
 - sign-up and the setup wizard (codes continue across batches, go-live needs machines, tenant isolation)
 - production safety (refusing unsafe settings, sign-up modes, payments switched off)
+- refunds and money safety (no double refunds, gateway failures, pending refunds, stuck paid starts)
+- maintenance plans, the WebSocket channel permissions, shop/machine/sensor management, analytics and the job queue
+- regressions for every issue found in the October 2026 code review (`test/review-fixes.test.ts`)
 
 Browser end-to-end tests (Playwright, 31 tests) run on an isolated stack: database `dobimaster_e2e` (created with `createdb -O dobi dobimaster_e2e`), API on :3100 and web on :5180. The database is reseeded on every run.
 

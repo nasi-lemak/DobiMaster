@@ -103,7 +103,7 @@ export function OwnerLayout() {
   const secondary = SECONDARY_NAV.filter(allowed);
   const moreActive = secondary.some((n) => pathname.startsWith(n.to)) || pathname.startsWith('/owner/more');
 
-  const logout = useLogout();
+  const { logout, error: logoutError } = useLogout();
 
   const sideLink = (n: NavItem) => (
     <NavLink
@@ -143,6 +143,11 @@ export function OwnerLayout() {
             <Icon name="logout" className="h-[18px] w-[18px]" />
             Log out
           </button>
+          {logoutError && (
+            <p role="alert" className="mt-1 px-3 text-xs text-critical-ink">
+              {logoutError}
+            </p>
+          )}
         </div>
       </aside>
 

@@ -170,7 +170,8 @@ export async function utilisation(ctx: Ctx, tenantId: string, shopIds: string[],
     let estSen = 0;
     for (const c of mine) {
       const iv = cycleInterval(c, now);
-      busyMs += overlapMs(iv, [from.getTime(), end.getTime()]);
+      // Only busy time while the shop is open counts: the denominator is open time.
+      for (const o of open) busyMs += overlapMs(iv, o);
       if (c.started_at >= from && c.started_at < end) {
         started++;
         estSen += c.price_sen ?? 0;
@@ -204,7 +205,7 @@ export async function utilisation(ctx: Ctx, tenantId: string, shopIds: string[],
       g.estimatedRevenueSen += r.estimatedRevenueSen;
       map.set(k, g);
     }
-    return [...map.values()].map((g) => ({ ...g, utilisation: g.openMin > 0 ? g.busyMin / g.openMin : 0 }));
+    return [...map.values()].map((g) => ({ ...g, utilisation: g.openMin > 0 ? Math.min(1, g.busyMin / g.openMin) : 0 }));
   };
 
   return {
@@ -461,8 +462,26 @@ export async function lowUsage(ctx: Ctx, tenantId: string, shopIds: string[], da
   const u = await utilisation(ctx, tenantId, shopIds, from, to);
   const last24 = new Date(to.getTime() - 24 * HOUR);
   const recent = await loadCycles(ctx, shopIds, last24, to);
+  // Machines deliberately out of service (now, or for a good part of the window) are quiet for a known reason.
+  const ids = u.machines.map((m) => m.machineId);
+  const states = ids.length ? await ctx.db.selectFrom('machines').select(['id', 'admin_state', 'staff_fault']).where('id', 'in', ids).execute() : [];
+  const down = ids.length
+    ? await ctx.db
+        .selectFrom('machine_state_log')
+        .select(['machine_id', 'started_at', 'ended_at'])
+        .where('machine_id', 'in', ids)
+        .where('state', 'in', ['maintenance', 'disabled', 'fault'])
+        .where((eb) => eb.or([eb('ended_at', 'is', null), eb('ended_at', '>', from)]))
+        .execute()
+    : [];
+  const downMs = (id: string) => down.filter((d) => d.machine_id === id).reduce((s, d) => s + overlapMs([d.started_at.getTime(), (d.ended_at ?? to).getTime()], [from.getTime(), to.getTime()]), 0);
+  const outOfService = (id: string) => {
+    const st = states.find((x) => x.id === id);
+    return !st || st.admin_state !== 'active' || st.staff_fault || downMs(id) > 0.25 * (to.getTime() - from.getTime());
+  };
   const flagged = [];
   for (const m of u.machines) {
+    if (outOfService(m.machineId)) continue;
     const peers = u.machines.filter((p) => p.shopId === m.shopId && p.type === m.type && p.machineId !== m.machineId);
     if (peers.length === 0) continue;
     const peerAvg = peers.reduce((s, p) => s + p.cycles, 0) / peers.length;

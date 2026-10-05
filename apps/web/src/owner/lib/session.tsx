@@ -1,7 +1,7 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Permission } from '@dobi/shared';
-import { api } from '../../lib/api';
+import { api, ApiError } from '../../lib/api';
 import type { Me } from './types';
 
 const MeContext = createContext<Me | null>(null);
@@ -27,18 +27,28 @@ export function useShopName() {
   return (id: string | null | undefined) => me.shops.find((s) => s.id === id)?.name ?? '—';
 }
 
-/** Log out: clear the cookie, drop every owner query and re-check /owner/me (which then shows the login screen). */
+/**
+ * Log out: end the session on the server, then drop every owner query (OwnerApp shows the login screen).
+ * Only clears the screen once the server confirmed: on a shared shop tablet, "logged out" must be true.
+ */
 export function useLogout() {
   const qc = useQueryClient();
-  return async () => {
+  const [error, setError] = useState<string | null>(null);
+  const logout = async () => {
+    setError(null);
     try {
       await api.post('/owner/auth/logout');
-    } finally {
-      // /owner/me resolves to null when signed out; OwnerApp then renders the login screen.
-      qc.setQueryData(['owner', 'me'], null);
-      qc.removeQueries({ queryKey: ['owner'], predicate: (q) => q.queryKey[1] !== 'me' });
+    } catch (e) {
+      if (!(e instanceof ApiError && e.status === 401)) {
+        setError('Couldn’t sign out: check the connection and try again.');
+        return false;
+      }
     }
+    qc.setQueryData(['owner', 'me'], null);
+    qc.removeQueries({ queryKey: ['owner'], predicate: (q) => q.queryKey[1] !== 'me' });
+    return true;
   };
+  return { logout, error };
 }
 
 /** Shop names without the words every branch shares ("Dobi Ceria SS2" → "SS2"), for tight labels. */

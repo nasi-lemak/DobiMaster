@@ -26,6 +26,6 @@ services:
       PAYMENT_PROVIDER: mock
       ALLOW_MOCK_PAYMENTS: 'true'
     ports:
-      - '3000:3000'
+      - '127.0.0.1:3000:3000' # this computer only: the secret above is public and fake payments are on
 volumes:
   pgdata:

@@ -58,7 +58,7 @@ if [ -n "$server_ip" ] && [ "$dns_ip" != "$server_ip" ]; then
 fi
 
 echo "== Building and starting DobiMaster (the first build takes a few minutes)"
-mkdir -p backups
+mkdir -p backups && chmod 700 backups
 docker compose up -d --build
 
 echo "== Waiting for https://$domain"

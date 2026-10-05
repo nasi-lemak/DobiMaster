@@ -24,7 +24,9 @@ export function PaymentPage() {
     refetchInterval: (query) => {
       const d = query.state.data;
       const settled = d && (['failed', 'expired', 'refunded'].includes(d.payment.status) || d.cycle?.sensorConfirmed || d.cycle?.status === 'finished' || d.cycle?.status === 'collected');
-      return settled ? false : 2000;
+      if (settled) return false;
+      // Fast while the start is being confirmed, then slow (e.g. a refund waiting on the shop).
+      return query.state.dataUpdateCount < 60 ? 2000 : 30_000;
     },
   });
   if (q.isLoading) return <PageLoader />;

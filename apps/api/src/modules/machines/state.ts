@@ -8,11 +8,14 @@ export function shopSettings(shop: Pick<Shop, 'settings'>): ShopSettings {
   return { ...DEFAULT_SHOP_SETTINGS, ...(shop.settings ?? {}) };
 }
 
-export async function countFaultReporters(ctx: Ctx, machineId: string): Promise<number> {
-  const since = new Date(ctx.now().getTime() - 24 * 3600_000);
+/** Customer fault reports count towards an automatic "faulty" state for this long. */
+export const FAULT_REPORT_WINDOW_MS = 24 * 3600_000;
+
+export async function countFaultReporters(ctx: Ctx, machineId: string): Promise<{ n: number; oldest: Date | null }> {
+  const since = new Date(ctx.now().getTime() - FAULT_REPORT_WINDOW_MS);
   const row = await ctx.db
     .selectFrom('tickets')
-    .select((eb) => eb.fn.count<string>(eb.fn.coalesce('customer_id', 'id')).distinct().as('n'))
+    .select((eb) => [eb.fn.count<string>(eb.fn.coalesce('customer_id', 'id')).distinct().as('n'), eb.fn.min('created_at').as('oldest')])
     .where('machine_id', '=', machineId)
     .where('counts_as_fault', '=', true)
     .where('status', 'in', ['open', 'in_progress'])
@@ -20,7 +23,7 @@ export async function countFaultReporters(ctx: Ctx, machineId: string): Promise<
     .where('created_at', '>=', since)
     .where('category', 'in', [...FAULT_CATEGORIES])
     .executeTakeFirst();
-  return Number(row?.n ?? 0);
+  return { n: Number(row?.n ?? 0), oldest: (row?.oldest as Date | null) ?? null };
 }
 
 /**
@@ -53,11 +56,12 @@ export async function recomputeMachineState(ctx: Ctx, machineId: string, reason?
         .executeTakeFirst();
 
   const now = ctx.now();
+  const reports = await countFaultReporters(ctx, machineId);
   const derived = deriveMachineState({
     now,
     adminState: m.admin_state,
     staffFault: m.staff_fault,
-    faultReporters: await countFaultReporters(ctx, machineId),
+    faultReporters: reports.n,
     faultReportThreshold: settings.faultReportThreshold,
     observed: m.observation !== 'none',
     device: device ? { lastSeenAt: device.last_seen_at, heartbeatSec: device.heartbeat_sec } : null,
@@ -70,6 +74,12 @@ export async function recomputeMachineState(ctx: Ctx, machineId: string, reason?
         : null,
     finishedHoldMin: settings.finishedHoldMin,
   });
+
+  // A customer-reported fault lapses when its oldest report leaves the window; make sure someone recomputes then.
+  if (derived.state === 'fault' && derived.source === 'customer' && reports.oldest) {
+    const at = new Date(reports.oldest.getTime() + FAULT_REPORT_WINDOW_MS + 1000);
+    await ctx.jobs.schedule('machine.recompute', at, { machineId }, `machine.recompute:${machineId}:fault:${at.getTime()}`);
+  }
 
   const changed = derived.state !== m.state || derived.source !== m.state_source || derived.cycleId !== m.current_cycle_id;
   if (!changed) return derived;

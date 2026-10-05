@@ -128,7 +128,10 @@ function hoursInfo(shop: Shop, now: Date) {
   const mins = p.hour * 60 + p.minute;
   const iv = openIntervalsForDow(shop.opening_hours as OpeningHours, p.isoDow).find(([o, c]) => mins >= o && mins < c);
   const is24 = !!iv && iv[0] === 0 && iv[1] === 1440 && Object.values(shop.opening_hours).every((h) => h && h.open === '00:00' && (h.close === '24:00' || h.close === '00:00'));
-  const closesAt = iv && !is24 ? `${String(Math.floor((iv[1] % 1440) / 60)).padStart(2, '0')}:${String(iv[1] % 60).padStart(2, '0')}` : null;
+  let closesAt = iv && !is24 ? `${String(Math.floor((iv[1] % 1440) / 60)).padStart(2, '0')}:${String(iv[1] % 60).padStart(2, '0')}` : null;
+  // Open past midnight (e.g. 08:00–02:00): the interval is cut at 24:00, but the shop really closes at 02:00.
+  const today = (shop.opening_hours as OpeningHours)[String(p.isoDow) as keyof OpeningHours];
+  if (iv && !is24 && iv[1] === 1440 && today && today.close < today.open && today.close !== '00:00') closesAt = today.close;
   return { openNow, open24h: is24, closesAt };
 }
 

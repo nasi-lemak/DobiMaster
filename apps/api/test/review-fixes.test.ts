@@ -354,3 +354,108 @@ describe('privacy retention', () => {
     expect((await h.ctx.db.selectFrom('refunds').select('payout_phone').where('id', '=', req).executeTakeFirstOrThrow()).payout_phone).toBeNull();
   });
 });
+
+describe('machine state, analytics and alerts over time', () => {
+  const KL_OFFSET_MS = 8 * 3600_000;
+  /** Earlier tests move the shared clock; jump forward to the next 10:00 in Kuala Lumpur (02:00 UTC). */
+  function toTenAmKL() {
+    const t = h.clock.now.getTime();
+    h.clock.now = new Date(Math.ceil((t - 2 * 3600_000) / 86_400_000) * 86_400_000 + 2 * 3600_000);
+  }
+  async function cycle(machineId: string, startUtc: Date, endUtc: Date) {
+    await h.ctx.db
+      .insertInto('cycles')
+      .values({
+        id: randomUUID(),
+        tenant_id: f.tenantId,
+        shop_id: f.shopId,
+        machine_id: machineId,
+        source: 'customer',
+        status: 'finished',
+        duration_min: Math.round((endUtc.getTime() - startUtc.getTime()) / 60_000),
+        started_at: startUtc,
+        expected_end_at: endUtc,
+        ended_at: endUtc,
+      })
+      .execute();
+  }
+
+  it('live updates resume after the database drops the listening connection', async () => {
+    const got: string[] = [];
+    const off = h.ctx.bus.onRemote((e) => got.push(e.type));
+    await h.ctx.pool.query(`SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE query = 'LISTEN dobi_events' AND datname = current_database() AND pid <> pg_backend_pid()`);
+    await expect
+      .poll(
+        async () => {
+          await h.ctx.bus.publish(`shop:${f.shopId}`, 'probe', {});
+          return got.includes('probe');
+        },
+        { timeout: 8000, interval: 500 },
+      )
+      .toBe(true);
+    off();
+  });
+
+  it('a fault from customer reports lapses after 24 h on its own', async () => {
+    for (let i = 0; i < 2; i++) {
+      const g = await guest(h, false);
+      await api('POST', '/public/reports', g.auth, { id: randomUUID(), qrToken: f.washer.qr, category: 'not_starting' });
+    }
+    expect((await machineState(h, f.washer.id)).state).toBe('fault');
+    await h.tick(24 * 60 + 2);
+    expect((await machineState(h, f.washer.id)).state).toBe('available');
+  });
+
+  it('utilisation only counts busy time while the shop is open, so it never exceeds 100%', async () => {
+    const { utilisation } = await import('../src/modules/analytics/service.js');
+    const daily = Object.fromEntries(['1', '2', '3', '4', '5', '6', '7'].map((d) => [d, { open: '08:00', close: '10:00' }]));
+    await h.ctx.db.updateTable('shops').set({ opening_hours: json(daily) }).where('id', '=', f.shopId).execute();
+    toTenAmKL();
+    // Clock is 10:00 in Kuala Lumpur. A cycle from 06:00 to 10:00 local: only 08:00–10:00 is open time.
+    const now = h.clock.now.getTime();
+    await cycle(f.washer.id, new Date(now - 4 * 3600_000), new Date(now));
+    const dayStartUtc = new Date(Math.floor((now + KL_OFFSET_MS) / 86_400_000) * 86_400_000 - KL_OFFSET_MS);
+    const u = await utilisation(h.ctx, f.tenantId, [f.shopId], dayStartUtc, h.clock.now);
+    const m = u.machines.find((x) => x.machineId === f.washer.id)!;
+    expect(m.busyMin).toBe(120);
+    expect(m.utilisation).toBeLessThanOrEqual(1);
+    expect(u.byShop.every((s) => s.utilisation <= 1)).toBe(true);
+  });
+
+  it('a shop open past midnight shows its real closing time', async () => {
+    const late = Object.fromEntries(['1', '2', '3', '4', '5', '6', '7'].map((d) => [d, { open: '08:00', close: '02:00' }]));
+    await h.ctx.db.updateTable('shops').set({ opening_hours: json(late) }).where('id', '=', f.shopId).execute();
+    toTenAmKL();
+    h.clock.advance(13 * 60); // 23:00 in Kuala Lumpur
+    const s = (await api('GET', `/public/shops/${f.shopSlug}`)).json();
+    expect(s.openNow).toBe(true);
+    expect(s.closesAt).toBe('02:00');
+  });
+
+  it('no "low usage" alert for a machine that was in maintenance', async () => {
+    const { lowUsage } = await import('../src/modules/analytics/service.js');
+    const now = h.clock.now.getTime();
+    // Two busy peers (W2, W3), one idle washer (W1) that staff put into maintenance.
+    for (const id of [f.sensored.id, f.paid.id]) for (let i = 0; i < 8; i++) await cycle(id, new Date(now - (i + 1) * 6 * 3600_000), new Date(now - (i + 1) * 6 * 3600_000 + 30 * 60_000));
+    expect((await lowUsage(h.ctx, f.tenantId, [f.shopId])).flagged.map((m) => m.machineId)).toContain(f.washer.id);
+    await api('POST', `/owner/machines/${f.washer.id}/admin-state`, owner, { adminState: 'maintenance', reason: 'New motor' });
+    expect((await lowUsage(h.ctx, f.tenantId, [f.shopId])).flagged.map((m) => m.machineId)).not.toContain(f.washer.id);
+  });
+
+  it('sensors dropping out a minute apart in a power cut give one shop alert; a sensor still dead after recovery gets its own', async () => {
+    const now = h.clock.now.getTime();
+    await h.ctx.db.updateTable('devices').set({ last_seen_at: new Date(now - 200_000) }).where('id', '=', f.sensored.deviceId).execute();
+    await h.ctx.db.updateTable('devices').set({ last_seen_at: new Date(now - 150_000) }).where('id', '=', f.paid.deviceId).execute();
+    await sweepDevices(h.ctx); // only the first is overdue yet
+    h.clock.advance(1);
+    await sweepDevices(h.ctx); // now the second
+    const open = async () => (await h.ctx.db.selectFrom('alerts').select(['kind', 'dedupe_key']).where('tenant_id', '=', f.tenantId).where('status', '<>', 'resolved').execute()).map((a) => a.dedupe_key);
+    expect(await open()).toEqual([`shop_offline:${f.shopId}`]);
+
+    // Power returns: one sensor reports, the other is broken.
+    await telemetry(f.sensored.token, [{ ts: h.clock.now.getTime(), powerW: 2 }]);
+    expect(await open()).toEqual([]);
+    await h.tick(4);
+    expect(await open()).toEqual([`device_offline:${f.paid.deviceId}`]);
+  });
+});

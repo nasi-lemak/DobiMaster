@@ -10,7 +10,7 @@ import { useLogout, useMe } from '../lib/session';
 export function MorePage() {
   const me = useMe();
   const allowed = useNavAllowed();
-  const logout = useLogout();
+  const { logout, error: logoutError } = useLogout();
   return (
     <>
       <PageHeader title="More" subtitle={`${me.user.name} · ${me.role} · ${me.tenant.name}`} />
@@ -33,6 +33,11 @@ export function MorePage() {
       <button type="button" onClick={logout} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-line bg-surface px-4 py-3 text-sm font-medium text-critical-ink hover:bg-surface-2">
         <Icon name="logout" className="h-5 w-5" /> Log out
       </button>
+      {logoutError && (
+        <p role="alert" className="mt-2 text-center text-sm text-critical-ink">
+          {logoutError}
+        </p>
+      )}
     </>
   );
 }

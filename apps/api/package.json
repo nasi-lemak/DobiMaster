@@ -11,7 +11,8 @@
     "seed": "tsx src/cli/seed.ts",
     "simulate": "tsx src/cli/simulate-device.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.include='src/**' --coverage.exclude='src/cli/**' --coverage.exclude='src/db/types.ts' --coverage.reporter=text-summary"
   },
   "dependencies": {
     "@dobi/shared": "workspace:*",

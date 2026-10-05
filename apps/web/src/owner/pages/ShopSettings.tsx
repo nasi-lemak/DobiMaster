@@ -187,7 +187,7 @@ function SettingsForm({ shop }: { shop: ShopRow }) {
 
       <Section title="Faults & reminders">
         <Card className="grid gap-3 p-4 sm:grid-cols-2">
-          <Field label="Reports to mark a machine faulty" hint="Different customers within 2 hours (1–10)">
+          <Field label="Reports to mark a machine faulty" hint="Different customers within 24 hours (1–10)">
             <input className={inputClass} type="number" min={1} max={10} value={threshold} onChange={(e) => setThreshold(e.target.value)} required />
           </Field>
           <Field label="“Almost done” reminder (min before end)" hint="1–30">

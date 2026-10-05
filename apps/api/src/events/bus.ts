@@ -19,6 +19,9 @@ const PG_CHANNEL = 'dobi_events';
  */
 export class EventBus {
   private listenClient: pg.PoolClient | null = null;
+  private stopped = false;
+  private retryMs = 1000;
+  private retryTimer: NodeJS.Timeout | null = null;
   private remote = new Set<RemoteListener>();
   private local = new Map<string, Set<LocalHandler>>();
 
@@ -28,8 +31,17 @@ export class EventBus {
   ) {}
 
   async start() {
-    this.listenClient = await this.pool.connect();
-    this.listenClient.on('notification', (msg) => {
+    this.stopped = false;
+    await this.listen();
+  }
+
+  /**
+   * One dedicated LISTEN connection. If it drops (Postgres restart, failover, network blip) it is replaced
+   * with back-off; otherwise live updates on this replica would stop until the process restarted.
+   */
+  private async listen() {
+    const client = await this.pool.connect();
+    client.on('notification', (msg) => {
       if (msg.channel !== PG_CHANNEL || !msg.payload) return;
       try {
         const evt = JSON.parse(msg.payload) as BusEvent;
@@ -38,11 +50,39 @@ export class EventBus {
         this.log.warn({ err }, 'bad bus payload');
       }
     });
-    this.listenClient.on('error', (err) => this.log.error({ err }, 'bus listen connection error'));
-    await this.listenClient.query(`LISTEN ${PG_CHANNEL}`);
+    const lost = (err?: Error) => {
+      if (this.listenClient !== client) return; // already replaced
+      this.listenClient = null;
+      this.log.error({ err }, 'bus listen connection lost; reconnecting');
+      client.release(err ?? true); // destroy, don't return a broken connection to the pool
+      this.scheduleReconnect();
+    };
+    client.on('error', lost);
+    client.on('end', () => lost());
+    await client.query(`LISTEN ${PG_CHANNEL}`);
+    this.listenClient = client;
+    this.retryMs = 1000;
+  }
+
+  private scheduleReconnect() {
+    if (this.stopped || this.retryTimer) return;
+    this.retryTimer = setTimeout(async () => {
+      this.retryTimer = null;
+      try {
+        await this.listen();
+        this.log.info('bus listen connection restored');
+      } catch (err) {
+        this.log.error({ err }, 'bus reconnect failed');
+        this.retryMs = Math.min(this.retryMs * 2, 30_000);
+        this.scheduleReconnect();
+      }
+    }, this.retryMs);
   }
 
   async stop() {
+    this.stopped = true;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
     if (this.listenClient) {
       await this.listenClient.query(`UNLISTEN ${PG_CHANNEL}`).catch(() => {});
       this.listenClient.release();

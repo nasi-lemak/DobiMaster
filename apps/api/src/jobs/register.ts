@@ -2,7 +2,7 @@ import { sql } from 'kysely';
 import type { Ctx } from '../context.js';
 import { registerCycleJobs } from '../modules/cycles/service.js';
 import { registerPaymentJobs } from '../modules/payments/service.js';
-import { ingestSamples, sweepDevices } from '../modules/telemetry/service.js';
+import { alertStillOffline, ingestSamples, sweepDevices } from '../modules/telemetry/service.js';
 import { sweepMaintenance } from '../modules/maintenance/service.js';
 import { sweepLowUsage } from '../modules/analytics/service.js';
 import { sweepDigest } from '../modules/digest/service.js';
@@ -14,6 +14,7 @@ export function registerJobs(ctx: Ctx, opts: { periodic: boolean }) {
   registerPaymentJobs(ctx);
 
   ctx.jobs.register('sweep.devices', () => sweepDevices(ctx));
+  ctx.jobs.register('devices.after_restore', ({ shopId }) => alertStillOffline(ctx, shopId));
   ctx.jobs.register('sweep.maintenance', () => sweepMaintenance(ctx));
   ctx.jobs.register('sweep.low_usage', () => sweepLowUsage(ctx));
   ctx.jobs.register('sweep.digest', () => sweepDigest(ctx));

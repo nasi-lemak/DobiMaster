@@ -78,6 +78,9 @@ export async function ingestSamples(ctx: Ctx, deviceId: string, samples: Sample[
   if (!wasOnline) {
     await resolveAlert(ctx, device.tenant_id, `device_offline:${device.id}`);
     await resolveAlert(ctx, device.tenant_id, `shop_offline:${device.shop_id}`);
+    // Power is back at the shop. Sensors come back seconds apart; give them a few minutes, then any still
+    // silent needs its own alert (the shop-wide alert that covered it is now resolved).
+    await ctx.jobs.schedule('devices.after_restore', new Date(ctx.now().getTime() + 3 * 60_000), { shopId: device.shop_id }, `devices.after_restore:${device.shop_id}`);
     await ctx.bus.publish(channels.tenant(device.tenant_id), 'device.status', { deviceId: device.id, online: true });
   }
   // Also when the device row never went offline but a recompute in the "stale" window stored the machine as offline.
@@ -144,6 +147,8 @@ async function applyDetectorEvent(ctx: Ctx, machine: Machine, evt: DetectorEvent
 /** Silent sensors in one shop at the same moment point at the shop (power cut / internet), not the machines. */
 export const SHOP_OUTAGE_MIN_DEVICES = 2;
 export const SHOP_OUTAGE_SHARE = 0.8;
+/** Sensors that went quiet within this long of each other count as one shop-wide event. */
+export const OUTAGE_GROUP_MS = 5 * 60_000;
 
 export async function sweepDevices(ctx: Ctx) {
   const now = ctx.now();
@@ -153,9 +158,16 @@ export async function sweepDevices(ctx: Ctx) {
   for (const d of stale) byShop.set(d.shop_id, [...(byShop.get(d.shop_id) ?? []), d]);
 
   for (const [shopId, silent] of byShop) {
-    const shopDevices = await ctx.db.selectFrom('devices').select('id').where('shop_id', '=', shopId).execute();
-    const outage = silent.length >= SHOP_OUTAGE_MIN_DEVICES && silent.length / shopDevices.length >= SHOP_OUTAGE_SHARE;
+    const shopDevices = await ctx.db.selectFrom('devices').select(['id', 'online', 'last_seen_at']).where('shop_id', '=', shopId).execute();
+    // Sensors in one power cut drop out at slightly different moments, so a previous sweep may already have
+    // marked some offline. Count those that went quiet around the same time as part of the same event.
+    const latest = Math.max(...silent.map((d) => d.last_seen_at?.getTime() ?? 0));
+    const recentlyOffline = shopDevices.filter((d) => !d.online && d.last_seen_at && latest - d.last_seen_at.getTime() <= OUTAGE_GROUP_MS);
+    const affected = silent.length + recentlyOffline.length;
+    const outage = affected >= SHOP_OUTAGE_MIN_DEVICES && affected / shopDevices.length >= SHOP_OUTAGE_SHARE;
     if (outage) {
+      // One shop alert replaces the per-sensor alerts raised a minute earlier.
+      for (const d of recentlyOffline) await resolveAlert(ctx, silent[0]!.tenant_id, `device_offline:${d.id}`);
       const shop = await ctx.db.selectFrom('shops').select('name').where('id', '=', shopId).executeTakeFirstOrThrow();
       const lastSeen = silent.map((d) => d.last_seen_at?.getTime() ?? 0).reduce((a, b) => Math.max(a, b), 0);
       await raiseAlert(ctx, {
@@ -163,7 +175,7 @@ export async function sweepDevices(ctx: Ctx) {
         shopId,
         kind: 'shop_offline',
         severity: 'high',
-        message: `${shop.name}: all ${silent.length} sensors went silent${lastSeen ? ` around ${new Date(lastSeen).toISOString()}` : ''} — likely a power cut or internet outage at the shop`,
+        message: `${shop.name}: all ${affected} sensors went silent${lastSeen ? ` around ${new Date(lastSeen).toISOString()}` : ''} — likely a power cut or internet outage at the shop`,
         dedupeKey: `shop_offline:${shopId}`,
       });
     }
@@ -171,20 +183,29 @@ export async function sweepDevices(ctx: Ctx) {
       await ctx.db.updateTable('devices').set({ online: false }).where('id', '=', d.id).execute();
       const machine = await ctx.db.selectFrom('machines').selectAll().where('device_id', '=', d.id).where('deleted_at', 'is', null).executeTakeFirst();
       await ctx.bus.publish(channels.tenant(d.tenant_id), 'device.status', { deviceId: d.id, online: false });
-      if (!outage) {
-        await raiseAlert(ctx, {
-          tenantId: d.tenant_id,
-          shopId: d.shop_id,
-          machineId: machine?.id ?? null,
-          kind: 'device_offline',
-          severity: 'medium',
-          message: `${machine ? machine.code : d.label || 'Sensor'} stopped reporting (last seen ${d.last_seen_at?.toISOString() ?? 'never'}) — tripped breaker, unplugged sensor or weak Wi-Fi?`,
-          dedupeKey: `device_offline:${d.id}`,
-        });
-      }
+      if (!outage) await raiseDeviceOffline(ctx, d, machine);
       if (machine) await recomputeMachineState(ctx, machine.id, outage ? 'shop outage' : 'device offline');
     }
   }
+}
+
+/** After a shop's sensors start reporting again: alert for each one that is still silent. */
+export async function alertStillOffline(ctx: Ctx, shopId: string) {
+  const stillDown = await ctx.db.selectFrom('devices').selectAll().where('shop_id', '=', shopId).where('online', '=', false).execute();
+  for (const d of stillDown) await raiseDeviceOffline(ctx, d);
+}
+
+async function raiseDeviceOffline(ctx: Ctx, d: Device, machine?: Pick<Machine, 'id' | 'code'> | null) {
+  machine ??= await ctx.db.selectFrom('machines').select(['id', 'code']).where('device_id', '=', d.id).where('deleted_at', 'is', null).executeTakeFirst();
+  await raiseAlert(ctx, {
+    tenantId: d.tenant_id,
+    shopId: d.shop_id,
+    machineId: machine?.id ?? null,
+    kind: 'device_offline',
+    severity: 'medium',
+    message: `${machine ? machine.code : d.label || 'Sensor'} stopped reporting (last seen ${d.last_seen_at?.toISOString() ?? 'never'}) — tripped breaker, unplugged sensor or weak Wi-Fi?`,
+    dedupeKey: `device_offline:${d.id}`,
+  });
 }
 
 /**

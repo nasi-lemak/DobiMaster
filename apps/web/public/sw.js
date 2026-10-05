@@ -1,5 +1,5 @@
 /* DobiMaster service worker: push notifications + offline app shell. Kept dependency-free on purpose. */
-const SHELL = 'dobi-shell-v1';
+const SHELL = 'dobi-shell-v2'; // bumped: v1 could hold error pages cached as the shell
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(SHELL).then((c) => c.addAll(['/', '/manifest.webmanifest', '/icon.svg'])).then(() => self.skipWaiting()));
@@ -20,8 +20,11 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(event.request)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(SHELL).then((c) => c.put('/', copy));
+          // Only a real page becomes the offline shell (not a 502 during an update, or a JSON response).
+          if (res.ok && (res.headers.get('content-type') || '').includes('text/html')) {
+            const copy = res.clone();
+            caches.open(SHELL).then((c) => c.put('/', copy));
+          }
           return res;
         })
         .catch(() => caches.match('/')),
@@ -34,8 +37,12 @@ self.addEventListener('fetch', (event) => {
         (hit) =>
           hit ||
           fetch(event.request).then((res) => {
-            const copy = res.clone();
-            caches.open(SHELL).then((c) => c.put(event.request, copy));
+            // A missing old chunk comes back as the HTML page: never cache that as a script.
+            const type = res.headers.get('content-type') || '';
+            if (res.ok && !type.includes('text/html')) {
+              const copy = res.clone();
+              caches.open(SHELL).then((c) => c.put(event.request, copy));
+            }
             return res;
           }),
       ),

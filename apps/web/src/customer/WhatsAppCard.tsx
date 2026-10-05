@@ -17,7 +17,7 @@ interface WaStatus {
  */
 export function WhatsAppCard({ cycleId }: { cycleId?: string }) {
   const { t, locale } = useI18n();
-  const status = useQuery({ queryKey: ['me', 'whatsapp'], queryFn: () => api.get<WaStatus>('/public/me/whatsapp', { guest: true }), refetchInterval: (q) => (q.state.data?.linked ? false : 5000) });
+  const status = useQuery({ queryKey: ['me', 'whatsapp'], queryFn: () => api.get<WaStatus>('/public/me/whatsapp', { guest: true }), refetchInterval: (q) => (q.state.data?.linked || q.state.data?.mode === 'disabled' ? false : 5000) });
   const [pending, setPending] = useState<{ code: string; url: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
