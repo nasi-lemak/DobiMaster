@@ -55,6 +55,9 @@ export function MachinesPage() {
         <Link to={`/owner/shops/${shopId}/qr-sheet`} className={linkBtn}>
           <Icon name="print" className="h-4 w-4" /> Print QR sticker sheet
         </Link>
+        <Link to={`/owner/shops/${shopId}/poster`} className={linkBtn}>
+          <Icon name="print" className="h-4 w-4" /> Print customer poster
+        </Link>
       </div>
 
       {added && (

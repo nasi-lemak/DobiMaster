@@ -353,6 +353,13 @@ function StickersStep({ d, shopId, onDone }: { d: Onboarding; shopId: string; on
           <li>One A4 sheet holds the stickers for {d.machines.length} machine{d.machines.length === 1 ? '' : 's'}, plus one for the shop door.</li>
           <li>Stick each one at eye level on the matching machine (W1 on W1…). Laminated or vinyl stickers last longest near water.</li>
           <li>Customers scan to see instructions in their language, start a timer, get “almost done” alerts and report problems.</li>
+          <li>
+            Also print the{' '}
+            <Link to={`/owner/shops/${shopId}/poster`} className="font-medium text-brand">
+              customer poster
+            </Link>{' '}
+            for the entrance: it explains how it works in BM, English and 中文.
+          </li>
         </ul>
       </div>
       <div className="flex flex-wrap gap-2">

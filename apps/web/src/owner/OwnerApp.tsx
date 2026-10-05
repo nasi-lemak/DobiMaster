@@ -14,6 +14,8 @@ import { MachineDetailPage } from './pages/MachineDetail';
 import { MachineEditPage } from './pages/MachineEdit';
 import { MachinesPage } from './pages/Machines';
 import { QrSheetPage } from './pages/QrSheet';
+import { PosterPage } from './pages/Poster';
+import { StaffGuidePage } from './pages/StaffGuide';
 import { TicketsPage } from './pages/Tickets';
 import { TicketDetailPage } from './pages/TicketDetail';
 import { RefundsPage } from './pages/Refunds';
@@ -75,6 +77,8 @@ export function OwnerApp() {
       <Routes>
         {/* Printable sheet renders without the app chrome. */}
         <Route path="shops/:id/qr-sheet" element={<QrSheetPage />} />
+        <Route path="shops/:id/poster" element={<PosterPage />} />
+        <Route path="staff-guide" element={<StaffGuidePage />} />
         <Route element={<OwnerLayout />}>
           <Route index element={<OverviewPage />} />
           <Route path="setup" element={<SetupPage />} />

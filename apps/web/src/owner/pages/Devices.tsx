@@ -262,7 +262,7 @@ function ShellySetup({ r }: { r: Registered }) {
       </div>
       <p className="text-xs text-muted">
         One Shelly EM measuring two machines? Register the second machine’s sensor too, then add its line to <code>channels</code> in the same script:{' '}
-        <code className="break-all">{'{ component: "em1:1", token: "<second token>" }'}</code>. The full installer checklist is in <code>docs/INSTALL-sensors.md</code>.
+        <code className="break-all">{'{ component: "em1:1", token: "<second token>" }'}</code>. The full installer checklist is in <code>docs/guides/sensors-electrician.md</code>.
       </p>
     </section>
   );

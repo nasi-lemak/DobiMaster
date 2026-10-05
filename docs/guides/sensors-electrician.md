@@ -1,37 +1,11 @@
-# Installing power sensors in a shop
+# Electrician job sheet: fitting power sensors in a shop
 
-This is a checklist for the owner and the installer (a registered electrician). It covers observation only: the sensors watch power use and never control the machine. Coins keep working exactly as before.
+This is the checklist to hand to the installer (a registered electrician), with the owner's steps before and after the visit. It covers observation only: the sensors watch power use and never control the machine. Coins keep working exactly as before.
 
 **Time:** about half a day for a 10-machine shop.
 **Cost:** about RM 150–250 per machine for the sensor and clamp, plus installation.
 
-## 0. What to buy
-
-**Prices are rough Malaysian online-retail estimates (Shopee / Lazada / local Shelly resellers). They have not been checked; confirm before ordering.**
-
-Only Shelly **Gen2 / Plus, Gen3 or Pro** devices work. They run our on-device script. **Gen1** (the original "Shelly EM", "Shelly 1PM") has no scripting, so it can't be used. Avoid Tuya / Sonoff / generic smart plugs: they report through the vendor's cloud, not to us.
-
-### A. Try it at home first (no electrician)
-
-| Item | Qty | Est. price | Notes |
-|---|---|---|---|
-| **Shelly Plus Plug UK** | 1 | ~RM 90–130 | Malaysia uses UK (BS 1363) sockets. Plug a home washer into it, then choose *Shelly Plus Plug UK* when registering the sensor. Max 13 A (~3 kW), which suits home washers and tumble dryers. **Not for commercial dryers.** |
-
-This shows the whole loop end to end: Wi-Fi, script, Running → Finished, the "almost done" alert and energy per cycle. It doesn't need a shop.
-
-### B. Pilot shop (about 10 machines, done by a registered wireman)
-
-| Item | Qty | Est. price | Notes |
-|---|---|---|---|
-| **Shelly EM Gen3** (or **Shelly Pro EM-50** for DIN rail) | 1 per 2 machines | ~RM 200–280 (Pro EM-50 ~RM 300–400) | Two clamp channels = two machines. Check whether one or two clamps come in the box. |
-| **Extra 50 A clamp (CT)** for that model | as needed | ~RM 40–70 | Use the clamp made for that Shelly model. Use 120 A clamps only for very large machines. |
-| **Shelly PM Mini Gen3** (optional) | small washers only | ~RM 70–100 | Inline, max 16 A. **Never on dryers.** |
-| Enclosure / DIN-rail space, labels | — | — | If there's no room in the DB, the electrician fits a small enclosure next to it. |
-| **4G router + prepaid data SIM** (only if the shop Wi-Fi is weak at the DB) | 1 | ~RM 150–250 + ~RM 30/month | Plan generously until it's measured on the first install. Every report is an HTTPS request, so a rough budget is about 0.5 GB per sensor per month (estimate). |
-
-Electrician labour is extra. It's typically quoted per shop; budget about half a day.
-
-For a 10-machine shop with 5 × EM Gen3 + 5 extra clamps, hardware is roughly **RM 1,200–1,700** before labour (estimate).
+**What to buy** (models, quantities, rough prices) is in [sensors-buy-and-home-test.md](sensors-buy-and-home-test.md). Do the home test there first: it proves the setup works before anyone opens a distribution board.
 
 ## 1. Before the visit
 
@@ -109,4 +83,4 @@ For **each machine**:
 | Cycle splits into two | A pause longer than the detection allows. Report the model for tuning |
 | Everything in the shop offline at once | Power cut, tripped main breaker or internet outage (one "shop offline" alert) |
 
-The script source is [`devices/shelly/dobimaster-sensor.js`](../devices/shelly/dobimaster-sensor.js). It is tested by running it against a simulated Shelly (`apps/api/test/shelly-script.test.ts`), but **it has not yet been run on a physical Shelly.** Do the one-cycle check in step 4 on the first real install.
+The script source is [`devices/shelly/dobimaster-sensor.js`](../../devices/shelly/dobimaster-sensor.js). It is tested by running it against a simulated Shelly (`apps/api/test/shelly-script.test.ts`), but **it has not yet been run on a physical Shelly.** Do the one-cycle check in step 4 on the first real install.

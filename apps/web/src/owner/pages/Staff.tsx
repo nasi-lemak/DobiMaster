@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { ROLE_PERMISSIONS, ROLES, type Role } from '@dobi/shared';
 import { api } from '../../lib/api';
 import { Button, Card, EmptyState, Field, inputClass } from '../../components/ui';
@@ -26,11 +27,16 @@ export function StaffPage() {
         title="Staff"
         subtitle="Who can sign in, their role and which branches they see"
         actions={
-          !adding && (
-            <Button size="sm" onClick={() => setAdding(true)}>
-              <Icon name="plus" className="h-4 w-4" /> Add person
-            </Button>
-          )
+          <>
+            <Link to="/owner/staff-guide" className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-1.5 text-sm font-medium hover:bg-surface-2">
+              <Icon name="print" className="h-4 w-4" /> Staff guide
+            </Link>
+            {!adding && (
+              <Button size="sm" onClick={() => setAdding(true)}>
+                <Icon name="plus" className="h-4 w-4" /> Add person
+              </Button>
+            )}
+          </>
         }
       />
       {adding && <AddStaff onDone={() => setAdding(false)} />}

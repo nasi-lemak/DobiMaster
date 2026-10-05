@@ -564,6 +564,12 @@ const zh: DeepPartial<Dict> = {
 
 const dictionaries: Record<Locale, DeepPartial<Dict>> = { en, ms, zh, ta: {} };
 
+/** Translate outside React (e.g. a printable poster that shows all three languages at once). */
+export function translate(locale: Locale, key: string, vars?: Record<string, string | number>): string {
+  const raw = lookup(dictionaries[locale], key) ?? lookup(en, key) ?? key;
+  return vars ? raw.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? '')) : raw;
+}
+
 export const LOCALE_LABELS: Array<{ code: Locale; label: string }> = [
   { code: 'ms', label: 'BM' },
   { code: 'en', label: 'EN' },
@@ -615,10 +621,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     () => ({
       locale,
       setLocale,
-      t: (key, vars) => {
-        const raw = lookup(dictionaries[locale], key) ?? lookup(en, key) ?? key;
-        return vars ? raw.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? '')) : raw;
-      },
+      t: (key, vars) => translate(locale, key, vars),
       tx: (text) => pickText(text, locale),
     }),
     [locale, setLocale],

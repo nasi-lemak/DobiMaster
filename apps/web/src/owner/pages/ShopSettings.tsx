@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { DEFAULT_SHOP_SETTINGS, type OpeningHours } from '@dobi/shared';
 import { api } from '../../lib/api';
 import { Button, Card, cx, Field, inputClass } from '../../components/ui';
-import { MutationError, PageHeader, QueryState, Section, ShopSelect, Toggle } from '../components/common';
+import { CopyButton, MutationError, PageHeader, QueryState, Section, ShopSelect, Toggle } from '../components/common';
 import { Icon } from '../components/icons';
 import { WEEKDAYS } from '../lib/labels';
 import { k, useApi, useApiMutation } from '../lib/queries';
@@ -90,6 +90,19 @@ function SettingsForm({ shop }: { shop: ShopRow }) {
       }}
       onChange={() => setSaved(false)}
     >
+      <Card className="mb-4 flex flex-wrap items-center gap-3 p-4 text-sm">
+        <div className="min-w-0 flex-1">
+          <p className="font-medium">Your shop page {!shop.is_published && <span className="text-warning-ink">(hidden from customers: turn on “Published” below)</span>}</p>
+          <a href={`/s/${shop.slug}`} target="_blank" rel="noreferrer" className="break-all text-brand">
+            {`${window.location.origin}/s/${shop.slug}`}
+          </a>
+          <p className="text-xs text-muted">Share it on WhatsApp, Facebook and your Google Maps listing.</p>
+        </div>
+        <CopyButton text={`${window.location.origin}/s/${shop.slug}`} label="Copy link" />
+        <Link to={`/owner/shops/${shop.id}/poster`} className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-1.5 text-sm font-medium hover:bg-surface-2">
+          <Icon name="print" className="h-4 w-4" /> Poster
+        </Link>
+      </Card>
       <Section title="Shop" className="mt-0">
         <Card className="grid gap-3 p-4 sm:grid-cols-2">
           <Field label="Name">
