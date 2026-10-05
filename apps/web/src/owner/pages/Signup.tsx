@@ -11,6 +11,7 @@ export function SignupPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [form, setForm] = useState({ businessName: '', name: '', email: '', password: '' });
+  const [accepted, setAccepted] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: e.target.value }));
@@ -20,7 +21,7 @@ export function SignupPage() {
     setPending(true);
     setError(null);
     try {
-      await api.post('/owner/auth/signup', { ...form, email: form.email.trim() });
+      await api.post('/owner/auth/signup', { ...form, email: form.email.trim(), acceptTerms: accepted });
       navigate('/owner/setup', { replace: true });
       await qc.invalidateQueries({ queryKey: k.me });
     } catch (err) {
@@ -52,6 +53,20 @@ export function SignupPage() {
           <Field label="Password" hint="At least 8 characters">
             <input className={inputClass} type="password" required minLength={8} autoComplete="new-password" value={form.password} onChange={set('password')} />
           </Field>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-0.5 h-4 w-4 accent-[var(--brand)]" required checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
+            <span>
+              I agree to the{' '}
+              <a href="/terms" target="_blank" rel="noreferrer" className="font-medium text-brand">
+                Terms of use
+              </a>{' '}
+              and{' '}
+              <a href="/privacy" target="_blank" rel="noreferrer" className="font-medium text-brand">
+                Privacy notice
+              </a>
+              , including looking after customers’ data that you’ll see.
+            </span>
+          </label>
           <MutationError error={error} />
           <Button type="submit" block size="lg" disabled={pending}>
             {pending ? 'Creating your account…' : 'Create account'}

@@ -124,7 +124,7 @@ export async function processGatewayRefund(ctx: Ctx, refundId: string, attempt: 
         .where('id', '=', p.id)
         .execute();
     });
-    await ctx.bus.publish([channels.tenant(r.tenant_id), channels.customer(p.customer_id)], 'payment.updated', { id: p.id });
+    await ctx.bus.publish([channels.tenant(r.tenant_id), ...(p.customer_id ? [channels.customer(p.customer_id)] : [])], 'payment.updated', { id: p.id });
   } catch (err) {
     if (attempt >= 5) {
       await ctx.db.updateTable('refunds').set({ status: 'failed' }).where('id', '=', r.id).execute();

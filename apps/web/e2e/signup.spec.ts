@@ -11,6 +11,7 @@ test('new owner: sign up, set up shop and machines, print stickers, go live', as
   await page.getByLabel('Your name').fill('Siti');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel(/^Password/).fill('wangi-wangi-2026');
+  await page.getByRole('checkbox', { name: /I agree to the Terms/ }).check();
   await page.getByRole('button', { name: 'Create account' }).click();
 
   // Step 1: shop.
@@ -67,6 +68,7 @@ test('sign-up refuses an email that already has an account', async ({ page }) =>
   await page.getByLabel('Your name').fill('X');
   await page.getByLabel('Email').fill('owner@dobiceria.my');
   await page.getByLabel(/^Password/).fill('another-password-1');
+  await page.getByRole('checkbox', { name: /I agree to the Terms/ }).check();
   await page.getByRole('button', { name: 'Create account' }).click();
   await expect(page.getByRole('alert')).toContainText('already exists');
 });
@@ -77,6 +79,7 @@ test('a half-finished setup shows a banner on Overview', async ({ page }) => {
   await page.getByLabel('Your name').fill('Ah Kow');
   await page.getByLabel('Email').fill(`half-${Date.now()}@newdobi.my`);
   await page.getByLabel(/^Password/).fill('separuh-jalan-9');
+  await page.getByRole('checkbox', { name: /I agree to the Terms/ }).check();
   await page.getByRole('button', { name: 'Create account' }).click();
   await page.getByLabel(/^Shop name/).fill('Dobi Separuh Cheras');
   await page.getByRole('button', { name: 'Save and continue' }).click();

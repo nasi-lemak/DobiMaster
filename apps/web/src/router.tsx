@@ -6,6 +6,7 @@ import { MachinePage } from './customer/MachinePage';
 import { ReportPage } from './customer/ReportPage';
 import { MyLaundryPage } from './customer/MyLaundryPage';
 import { PaymentPage, MockGatewayPage } from './customer/PaymentPage';
+import { LegalPage } from './legal/LegalPage';
 
 // The owner dashboard is lazy-loaded so customers never download it.
 export const router = createBrowserRouter([
@@ -19,6 +20,8 @@ export const router = createBrowserRouter([
       { path: '/s/:slug/report', element: <ReportPage /> },
       { path: '/me', element: <MyLaundryPage /> },
       { path: '/pay/:id', element: <PaymentPage /> },
+      { path: '/privacy', element: <LegalPage doc="privacy" /> },
+      { path: '/terms', element: <LegalPage doc="terms" /> },
     ],
   },
   { path: '/pay/mock/:id', element: <MockGatewayPage /> },

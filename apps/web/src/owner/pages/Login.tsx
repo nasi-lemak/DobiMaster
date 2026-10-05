@@ -101,6 +101,14 @@ export function LoginPage() {
             </Link>
           </p>
         )}
+        <p className="mt-4 flex justify-center gap-4 text-xs text-muted">
+          <a href="/privacy" className="underline-offset-2 hover:underline">
+            Privacy
+          </a>
+          <a href="/terms" className="underline-offset-2 hover:underline">
+            Terms
+          </a>
+        </p>
         {SHOW_DEMO_LOGINS && (
         <div className="mt-4 rounded-2xl bg-surface-2 p-3 text-xs text-ink-2">
           <p className="font-medium">Demo accounts (password demo1234)</p>

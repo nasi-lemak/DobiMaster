@@ -112,6 +112,10 @@ cd /opt/dobimaster/deploy && docker compose up -d
 
 ## 6. Finish setup (recommended before the pilot)
 
+0. **Privacy notice and terms.** They are at `/privacy` and `/terms` and are linked from every customer page and from sign-up.
+   - Set the `LEGAL_*` settings in `deploy/.env`: business name, SSM registration number, address and contact email. The setup script fills in the name and email; add the rest.
+   - **The texts are drafts.** Have a lawyer review them first; [LEGAL-REVIEW.md](LEGAL-REVIEW.md) is the briefing note to send them.
+
 1. **Email.** Without it, "Forgot password" and the weekly summary only appear in the server log.
    - Sign up with an email-sending service and verify your domain there.
    - Set `SMTP_URL` and `MAIL_FROM` in `deploy/.env`.

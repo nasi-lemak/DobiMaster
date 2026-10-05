@@ -24,8 +24,12 @@ export async function customerFromRequest(ctx: Ctx, req: FastifyRequest, require
     if (required) throw unauthorized('Guest token required');
     return null;
   }
-  // Refresh last_seen occasionally; cheap enough per request at MVP scale.
-  await ctx.db.updateTable('customers').set({ last_seen_at: ctx.now() }).where('id', '=', claims.sub).execute();
+  // Refresh last_seen; cheap enough per request at MVP scale. No row = the guest erased their data.
+  const seen = await ctx.db.updateTable('customers').set({ last_seen_at: ctx.now() }).where('id', '=', claims.sub).executeTakeFirst();
+  if (!Number(seen.numUpdatedRows)) {
+    if (required) throw unauthorized('Guest no longer exists');
+    return null;
+  }
   return claims.sub;
 }
 

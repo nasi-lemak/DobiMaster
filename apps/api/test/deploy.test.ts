@@ -10,7 +10,7 @@ afterEach(async () => {
 });
 
 const signup = (hh: Harness, email: string) =>
-  hh.app.inject({ method: 'POST', url: '/api/v1/owner/auth/signup', payload: { businessName: 'Dobi Test', name: 'T', email, password: 'a-good-password-9' } });
+  hh.app.inject({ method: 'POST', url: '/api/v1/owner/auth/signup', payload: { businessName: 'Dobi Test', name: 'T', email, password: 'a-good-password-9', acceptTerms: true } });
 
 describe('production settings', () => {
   const prod = { ...config, isProd: true, jwtSecret: 'x'.repeat(64), publicUrl: 'https://dobi.example.my', paymentProvider: 'none', allowMockPaymentsInProduction: false };

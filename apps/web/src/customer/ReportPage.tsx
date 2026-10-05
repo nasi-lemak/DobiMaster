@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { MONEY_CATEGORIES, TICKET_CATEGORIES, type TicketCategory } from '@dobi/shared';
+import { MONEY_CATEGORIES, PRIVACY_RETENTION, TICKET_CATEGORIES, type TicketCategory } from '@dobi/shared';
 import { api, ApiError, uploadPhoto, uuid } from '../lib/api';
 import { preparePhoto } from '../lib/image';
 import { useI18n } from '../lib/i18n';
@@ -171,7 +171,7 @@ export function ReportPage() {
               <Field label={t('amountLost')}>
                 <input className={inputClass} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="5.00" />
               </Field>
-              <Field label={t('refundPhone')} hint={t('refundPhoneHint')}>
+              <Field label={t('refundPhone')} hint={t('refundPhoneHint', { days: PRIVACY_RETENTION.contactPhoneDays })}>
                 <input className={inputClass} type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="012-345 6789" />
               </Field>
             </>

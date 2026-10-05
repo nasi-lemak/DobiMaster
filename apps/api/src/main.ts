@@ -1,4 +1,4 @@
-import { assertProductionConfig, config } from './config.js';
+import { assertProductionConfig, config, productionWarnings } from './config.js';
 import { buildApp } from './app.js';
 import { createPool } from './db/index.js';
 import { migrate } from './db/migrate.js';
@@ -8,6 +8,8 @@ if (problems.length) {
   console.error(`Refusing to start — fix these settings in .env:\n- ${problems.join('\n- ')}`);
   process.exit(1);
 }
+
+for (const w of productionWarnings()) console.warn(`WARNING: ${w}`);
 
 const pool = createPool();
 await migrate(pool, (m) => console.log(m));

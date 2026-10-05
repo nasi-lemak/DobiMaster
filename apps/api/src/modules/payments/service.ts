@@ -132,7 +132,8 @@ export async function handleGatewayWebhook(ctx: Ctx, headers: Record<string, str
 
 async function publishPayment(ctx: Ctx, paymentId: string) {
   const p = await ctx.db.selectFrom('payments').selectAll().where('id', '=', paymentId).executeTakeFirstOrThrow();
-  await ctx.bus.publish([channels.customer(p.customer_id), channels.tenant(p.tenant_id)], 'payment.updated', serializePayment(p));
+  // An erased customer no longer has a channel; the shop still sees the update.
+  await ctx.bus.publish([...(p.customer_id ? [channels.customer(p.customer_id)] : []), channels.tenant(p.tenant_id)], 'payment.updated', serializePayment(p));
 }
 
 async function markSucceeded(ctx: Ctx, paymentId: string) {

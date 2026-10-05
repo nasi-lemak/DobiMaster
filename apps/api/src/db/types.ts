@@ -35,7 +35,7 @@ export interface TenantsTable {
   name: string;
   slug: string;
   plan: Generated<string>;
-  onboarding: JsonOpt<{ stickersPrintedAt?: string }>;
+  onboarding: JsonOpt<{ stickersPrintedAt?: string; termsVersion?: string; termsAcceptedAt?: string }>;
   created_at: Timestamp;
 }
 
@@ -162,7 +162,7 @@ export interface PaymentsTable {
   tenant_id: string;
   shop_id: string;
   machine_id: string;
-  customer_id: string;
+  customer_id: string | null; // null once the customer erased their data
   cycle_id: string | null;
   program_id: string;
   amount_sen: number;

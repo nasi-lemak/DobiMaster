@@ -5,6 +5,7 @@ import { api, ApiError, getGuestToken } from '../lib/api';
 import { useI18n } from '../lib/i18n';
 import { dateTime, rm } from '../lib/format';
 import { enableCustomerPush, pushSupport } from '../lib/push';
+import { deleteMyData } from '../lib/privacy';
 import { useChannels } from '../lib/realtime';
 import { Button, Card, EmptyState, PageLoader, Pill } from '../components/ui';
 import { useMyCycles } from './Layout';
@@ -52,6 +53,7 @@ export function MyLaundryPage() {
   const [notifOn, setNotifOn] = useState(() => pushSupport() === 'supported' && typeof Notification !== 'undefined' && Notification.permission === 'granted');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deleted, setDeleted] = useState<number | null>(null);
 
   async function act(c: MyCycle, action: 'collected' | 'cancel') {
     setBusyId(c.id);
@@ -66,6 +68,16 @@ export function MyLaundryPage() {
     }
   }
 
+  if (deleted !== null)
+    return (
+      <div className="space-y-3">
+        <h1 className="text-xl font-semibold">{t('yourData')}</h1>
+        <Card className="space-y-2 p-4 text-sm" role="status">
+          <p className="font-medium text-good-ink">{t('dataDeleted')}</p>
+          {deleted > 0 && <p className="text-ink-2">{t('dataDeletedOpen', { n: deleted })}</p>}
+        </Card>
+      </div>
+    );
   if (!getGuestToken()) return <EmptyState title={t('noActive')} />;
   if (my.isLoading) return <PageLoader />;
   const cycles = my.data?.cycles ?? [];
@@ -186,6 +198,57 @@ export function MyLaundryPage() {
           </ul>
         </section>
       )}
+
+      <YourData
+        onDeleted={(n) => {
+          setDeleted(n);
+          qc.removeQueries({ queryKey: ['me'] });
+        }}
+      />
     </div>
+  );
+}
+
+function YourData({ onDeleted }: { onDeleted: (openReportsKeepingPhone: number) => void }) {
+  const { t } = useI18n();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      onDeleted(await deleteMyData());
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t('offline'));
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="border-t border-line pt-4 text-sm">
+      <h2 className="mb-1 font-semibold">{t('yourData')}</h2>
+      <p className="text-ink-2">{t('deleteDataHint')}</p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {confirming ? (
+          <>
+            <span className="w-full font-medium">{t('deleteDataConfirm')}</span>
+            <Button size="sm" variant="danger" disabled={busy} onClick={run}>
+              {t('deleteDataYes')}
+            </Button>
+            <Button size="sm" variant="secondary" disabled={busy} onClick={() => setConfirming(false)}>
+              {t('deleteDataNo')}
+            </Button>
+          </>
+        ) : (
+          <Button size="sm" variant="secondary" onClick={() => setConfirming(true)}>
+            {t('deleteData')}
+          </Button>
+        )}
+        <Link to="/privacy" className="text-xs text-brand underline-offset-2 hover:underline">
+          {t('readPrivacy')}
+        </Link>
+      </div>
+      {error && <p className="mt-2 text-critical-ink">{error}</p>}
+    </section>
   );
 }

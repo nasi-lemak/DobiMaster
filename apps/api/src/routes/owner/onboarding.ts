@@ -5,6 +5,7 @@ import {
   DEFAULT_MAINTENANCE,
   DRYER_INSTRUCTIONS,
   HOURS_24,
+  LEGAL_VERSION,
   MACHINE_PRESETS,
   recommendedLoad,
   sameHoursEveryDay,
@@ -76,6 +77,7 @@ export async function onboardingRoutes(app: FastifyInstance, ctx: Ctx, opts: { s
         name: z.string().trim().min(1).max(100),
         email: z.string().trim().email().max(200),
         password: z.string().max(200),
+        acceptTerms: z.literal(true, { message: 'Please accept the terms and privacy notice' }),
       })
       .parse(req.body);
     if (!(await signupAllowed(ctx.db, mode()))) throw new AppError(403, 'signup_closed', 'New sign-ups are closed on this server. Ask the operator for an account.');
@@ -84,13 +86,22 @@ export async function onboardingRoutes(app: FastifyInstance, ctx: Ctx, opts: { s
     const exists = await ctx.db.selectFrom('users').select('id').where('email', '=', email).executeTakeFirst();
     if (exists) throw conflict('email_taken', 'An account with this email already exists — sign in instead (or reset your password).');
     const tenantId = await ctx.db.transaction().execute(async (trx) => {
-      const t = await trx.insertInto('tenants').values({ name: b.businessName, slug: await uniqueSlug(trx, 'tenants', b.businessName), plan: 'starter' }).returning('id').executeTakeFirstOrThrow();
+      const t = await trx
+        .insertInto('tenants')
+        .values({
+          name: b.businessName,
+          slug: await uniqueSlug(trx, 'tenants', b.businessName),
+          plan: 'starter',
+          onboarding: json({ termsVersion: LEGAL_VERSION, termsAcceptedAt: ctx.now().toISOString() }),
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
       const u = await trx.insertInto('users').values({ email, name: b.name, password_hash: await hashPassword(b.password) }).returning('id').executeTakeFirstOrThrow();
       await trx.insertInto('memberships').values({ tenant_id: t.id, user_id: u.id, role: 'owner', shop_ids: null }).execute();
       return t.id;
     });
     const { token, user } = await login(ctx, email, b.password, { userAgent: req.headers['user-agent'], ip: req.ip });
-    await audit(ctx, { userId: user.id, name: user.name, tenantId, ip: req.ip }, 'tenant.signup', 'tenant', tenantId, undefined, { businessName: b.businessName });
+    await audit(ctx, { userId: user.id, name: user.name, tenantId, ip: req.ip }, 'tenant.signup', 'tenant', tenantId, undefined, { businessName: b.businessName, termsVersion: LEGAL_VERSION });
     setSessionCookie(reply, token, config.isProd);
     return { ok: true };
   });

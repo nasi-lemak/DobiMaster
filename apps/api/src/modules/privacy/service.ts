@@ -1,21 +1,14 @@
 import { sql } from 'kysely';
 import type { Ctx } from '../../context.js';
+import { PRIVACY_RETENTION } from '@dobi/shared';
 import { deleteAttachments } from '../attachments/service.js';
 
 /**
  * Personal-data retention (Malaysian PDPA: keep personal data no longer than the purpose needs).
  * Documented to customers on the report form ("deleted after the case is closed").
  */
-export const RETENTION = {
-  /** Refund phone numbers on closed tickets / settled refunds. */
-  contactPhoneDays: 90,
-  /** Photos attached to closed tickets. */
-  ticketPhotoDays: 180,
-  /** WhatsApp numbers that haven't messaged us. */
-  waContactDays: 180,
-  /** WhatsApp message log. */
-  waMessageDays: 30,
-};
+// Shared with the web app so the privacy notice always states the real numbers.
+export const RETENTION = PRIVACY_RETENTION;
 
 const daysAgo = (ctx: Ctx, d: number) => new Date(ctx.now().getTime() - d * 86_400_000);
 
@@ -58,4 +51,31 @@ export async function sweepPrivacy(ctx: Ctx) {
   };
   ctx.log.info(result, 'privacy sweep');
   return result;
+}
+
+/**
+ * "Delete my data" for a guest. Business records (cycles, payments, problem reports) stay for the shop
+ * but are unlinked from the person. Phone numbers on closed reports go now; open reports keep theirs
+ * until resolved, because the shop needs it to refund you (then the normal sweep removes it).
+ */
+export async function eraseCustomer(ctx: Ctx, customerId: string) {
+  return ctx.db.transaction().execute(async (trx) => {
+    const c = await trx.selectFrom('customers').select('id').where('id', '=', customerId).forUpdate().executeTakeFirst();
+    if (!c) return null;
+    const wa = await trx.selectFrom('wa_contacts').select('wa_id').where('customer_id', '=', customerId).execute();
+    if (wa.length) await trx.deleteFrom('wa_messages').where('wa_id', 'in', wa.map((w) => w.wa_id)).execute();
+
+    const tickets = await trx.selectFrom('tickets').select(['id', 'status', 'contact_phone']).where('customer_id', '=', customerId).execute();
+    const closed = tickets.filter((t) => t.status === 'resolved' || t.status === 'rejected').map((t) => t.id);
+    if (closed.length) {
+      await trx.updateTable('tickets').set({ contact_phone: null }).where('id', 'in', closed).execute();
+      await trx.updateTable('refunds').set({ payout_phone: null }).where('ticket_id', 'in', closed).where('status', 'in', ['paid', 'rejected']).execute();
+    }
+    const openWithPhone = tickets.filter((t) => !closed.includes(t.id) && t.contact_phone).length;
+
+    // Cascades: push subscriptions, WhatsApp link + codes, "notify me when free" watches.
+    // Set NULL: cycles, payments, tickets, photo uploader.
+    await trx.deleteFrom('customers').where('id', '=', customerId).execute();
+    return { openReportsKeepingPhone: openWithPhone };
+  });
 }

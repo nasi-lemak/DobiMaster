@@ -35,8 +35,12 @@ if [ ! -f .env ]; then
   echo "== Creating deploy/.env"
   read -r -p "Domain for DobiMaster (e.g. app.yourdobi.my): " domain
   read -r -p "Your email (for HTTPS certificate notices): " email
+  read -r -p "Business name customers' data is held by (for the privacy notice, e.g. Dobi Ceria Sdn. Bhd.): " operator
   cp .env.example .env
-  sed -i "s|^DOMAIN=.*|DOMAIN=${domain}|; s|^ACME_EMAIL=.*|ACME_EMAIL=${email}|; s|^VAPID_SUBJECT=.*|VAPID_SUBJECT=mailto:${email}|" .env
+  # Escape characters that are special in a sed replacement (e.g. "Ali & Sons Sdn. Bhd.").
+  esc() { printf '%s' "$1" | sed 's/[&|\\]/\\&/g'; }
+  domain=$(esc "$domain"); email=$(esc "$email"); operator=$(esc "$operator")
+  sed -i "s|^DOMAIN=.*|DOMAIN=${domain}|; s|^ACME_EMAIL=.*|ACME_EMAIL=${email}|; s|^VAPID_SUBJECT=.*|VAPID_SUBJECT=mailto:${email}|; s|^LEGAL_OPERATOR_NAME=.*|LEGAL_OPERATOR_NAME=${operator}|; s|^LEGAL_CONTACT_EMAIL=.*|LEGAL_CONTACT_EMAIL=${email}|" .env
   sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 32)|; s|^JWT_SECRET=.*|JWT_SECRET=$(openssl rand -hex 32)|" .env
   chmod 600 .env
   echo "Saved. Secrets were generated for you; keep a copy of deploy/.env somewhere safe (password manager)."

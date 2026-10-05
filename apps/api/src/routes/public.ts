@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { TICKET_CATEGORIES } from '@dobi/shared';
+import { LEGAL_VERSION, PRIVACY_RETENTION, TICKET_CATEGORIES } from '@dobi/shared';
+import { config } from '../config.js';
+import { eraseCustomer } from '../modules/privacy/service.js';
 import type { Ctx } from '../context.js';
 import { json } from '../db/index.js';
 import { createGuest, customerFromRequest } from '../auth/guest.js';
@@ -15,6 +17,17 @@ import { activeWatches, cancelWatch, createWatch } from '../modules/watches/serv
 const uuid = z.string().uuid();
 
 export async function publicRoutes(app: FastifyInstance, ctx: Ctx) {
+  /** Who runs this server, for the privacy notice and terms. */
+  app.get('/public/legal', async () => ({ ...config.legal, version: LEGAL_VERSION, retention: PRIVACY_RETENTION }));
+
+  /** "Delete my data on this phone": erases the guest; the shop keeps unlinked business records. */
+  app.delete('/public/me', { config: { rateLimit: { max: 10, timeWindow: '1 hour' } } }, async (req) => {
+    const customerId = await customerFromRequest(ctx, req, true);
+    const res = await eraseCustomer(ctx, customerId);
+    req.log.info({ erased: true }, 'guest erased their data');
+    return { ok: true, openReportsKeepingPhone: res?.openReportsKeepingPhone ?? 0 };
+  });
+
   app.post('/public/guest', { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } }, async (req) => {
     const body = z.object({ locale: z.string().max(5).optional() }).parse(req.body ?? {});
     return createGuest(ctx, body.locale ?? 'en');

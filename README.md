@@ -23,6 +23,7 @@ For owners:
 | [docs/02-product.md](docs/02-product.md) | Features ranked MVP / Phase 2 / Phase 3, what **not** to build, wireframes for every screen |
 | [docs/03-architecture.md](docs/03-architecture.md) | Domain model, API, real-time events, IoT (observe vs. control), payments |
 | [docs/04-business.md](docs/04-business.md) | Competitor comparison, infrastructure cost (1/10/100 shops), pricing, risks, staged plan |
+| [docs/LEGAL-REVIEW.md](docs/LEGAL-REVIEW.md) | Briefing for the lawyer reviewing the privacy notice and terms: data actually processed, retention, open PDPA questions |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Putting it online: server, domain, HTTPS, backups, updates, restores |
 | [docs/INSTALL-sensors.md](docs/INSTALL-sensors.md) | What hardware to buy (home test kit, pilot shop); installer checklist: choosing Shelly models, DB/clamp installation, connecting, verifying a first cycle, troubleshooting |
 | [docs/research/competitor-research.md](docs/research/competitor-research.md) | Sourced market research: Malaysian QR retrofit vendors, chains, payment rails, complaints |
@@ -43,7 +44,7 @@ For owners:
 | **"Notify me when free"** | At shops where the machine class is fully sensored, a customer can wait for, say, a 15 kg washer. Each machine that frees up notifies exactly one waiting customer, in order, so a single free machine doesn't send five people rushing over. Nothing is reserved. |
 | **Shelly sensors** | An on-device script ([`devices/shelly/dobimaster-sensor.js`](devices/shelly/dobimaster-sensor.js)) for Shelly EM Gen3 / Pro EM / Plus 1PM / PM Mini / Plus Plug UK. It reports every 10 s while running, sends a heartbeat every 60 s when idle, buffers about 10 minutes through Wi-Fi drops, handles a reversed clamp, and supports two machines per EM. Registering a Shelly sensor shows the script with its URL, token and channel filled in. It is tested against a simulated Shelly end to end, **not yet on a physical device**. The installer checklist is [docs/INSTALL-sensors.md](docs/INSTALL-sensors.md). |
 | **Sensor analytics** | Energy is measured per cycle. *Electricity per cycle* in Analytics multiplies it by the shop's tariff (Shop settings) to give cost and share of price per machine. The demo data shows dryers at about 24% vs washers at about 5%. A whole shop's sensors going silent together raises one "power / internet outage" alert instead of one per machine. A dryer drawing far less power than its own usual raises "heater may be failing". |
-| **Privacy (PDPA)** | Daily retention sweep. Refund phone numbers are removed 90 days after a case closes, report photos after 180 days, and inactive WhatsApp numbers after 180 days. The WhatsApp message log is kept for 30 days. |
+| **Privacy (PDPA)** | **Privacy notice and terms of use** at `/privacy` and `/terms` (drafts, pending legal review). They are in BM, EN and 中文 (the PDPA requires BM and English), linked from every customer page and from owner sign-up, which records the version accepted. **"Delete my data on this phone"** (My laundry) erases a customer immediately; the shop keeps its records, unlinked from the person. A daily sweep removes refund phone numbers 90 days after a case closes, report photos after 180 days and inactive WhatsApp numbers after 180 days, and keeps the WhatsApp message log for 30 days. |
 
 ## Run it locally
 
@@ -97,7 +98,7 @@ The integration tests cover:
 - sign-up and the setup wizard (codes continue across batches, go-live needs machines, tenant isolation)
 - production safety (refusing unsafe settings, sign-up modes, payments switched off)
 
-Browser end-to-end tests (Playwright, 28 tests) run on an isolated stack: database `dobimaster_e2e` (created with `createdb -O dobi dobimaster_e2e`), API on :3100 and web on :5180. The database is reseeded on every run.
+Browser end-to-end tests (Playwright, 30 tests) run on an isolated stack: database `dobimaster_e2e` (created with `createdb -O dobi dobimaster_e2e`), API on :3100 and web on :5180. The database is reseeded on every run.
 
 ```bash
 pnpm --filter @dobi/web test:e2e

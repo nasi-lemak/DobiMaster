@@ -38,6 +38,16 @@ export async function ensureGuest(locale = 'en'): Promise<string> {
   return guestPromise;
 }
 
+/** Forget this phone's guest identity (after "Delete my data"); the next request starts a fresh guest. */
+export function forgetGuest() {
+  try {
+    localStorage.removeItem(GUEST_KEY);
+  } catch {
+    /* ignore */
+  }
+  guestPromise = null;
+}
+
 export async function request<T>(method: string, path: string, body?: unknown, opts: { guest?: boolean; headers?: Record<string, string> } = {}): Promise<T> {
   const headers: Record<string, string> = { ...opts.headers };
   if (body !== undefined) headers['content-type'] = 'application/json';

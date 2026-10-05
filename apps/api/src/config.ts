@@ -68,6 +68,18 @@ export const config = {
     /** Approved template names for messages sent outside the 24 h window (optional; billed per message). */
     digestTemplate: process.env.WHATSAPP_DIGEST_TEMPLATE,
   },
+  /**
+   * Who operates this server, shown in the privacy notice and terms (PDPA: customers must be told who
+   * holds their data and how to contact them). Set these on every real server.
+   */
+  legal: {
+    operatorName: process.env.LEGAL_OPERATOR_NAME ?? (isProd ? null : 'DobiMaster (development server)'),
+    registrationNo: process.env.LEGAL_REGISTRATION_NO ?? null,
+    address: process.env.LEGAL_ADDRESS ?? null,
+    contactEmail: process.env.LEGAL_CONTACT_EMAIL ?? (isProd ? null : 'privacy@example.my'),
+    /** Where the server (and so the data) physically is, e.g. "Singapore". */
+    dataLocation: process.env.LEGAL_DATA_LOCATION ?? 'Singapore',
+  },
   /** SMTP connection URL for owner emails (weekly digest). Without it, emails are logged. */
   smtpUrl: process.env.SMTP_URL,
   mailFrom: env('MAIL_FROM', 'DobiMaster <no-reply@dobimaster.local>'),
@@ -84,4 +96,14 @@ export function assertProductionConfig(c: typeof config = config): string[] {
   if (c.paymentProvider === 'mock' && !c.allowMockPaymentsInProduction)
     errors.push('PAYMENT_PROVIDER=mock lets anyone start machines for free. Use PAYMENT_PROVIDER=none, or set ALLOW_MOCK_PAYMENTS=true for a demo server.');
   return errors;
+}
+
+/** Settings a real server should have but that don't make it unsafe to start (printed as warnings). */
+export function productionWarnings(c: typeof config = config): string[] {
+  if (!c.isProd) return [];
+  const w: string[] = [];
+  if (!c.legal.operatorName || !c.legal.contactEmail)
+    w.push('LEGAL_OPERATOR_NAME and LEGAL_CONTACT_EMAIL are not set: the privacy notice will show "[not set]" (required under the PDPA).');
+  if (!c.smtpUrl) w.push('SMTP_URL is not set: password-reset and weekly-summary emails are only logged, not sent.');
+  return w;
 }

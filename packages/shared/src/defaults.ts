@@ -92,3 +92,21 @@ export const DEFAULT_MAINTENANCE = [
   { machineType: 'dryer' as const, title: 'Clean lint duct & check burner/heater', intervalDays: 30, intervalRunHours: 200 },
   { machineType: 'washer' as const, title: 'Descale & check door gasket', intervalDays: 90, intervalCycles: 500 },
 ];
+
+/**
+ * Personal-data retention (Malaysian PDPA: keep personal data no longer than the purpose needs).
+ * The API's daily sweep enforces these; the privacy notice quotes them.
+ */
+export const PRIVACY_RETENTION = {
+  /** Refund phone numbers on closed problem reports / settled refunds. */
+  contactPhoneDays: 90,
+  /** Photos attached to closed problem reports. */
+  ticketPhotoDays: 180,
+  /** WhatsApp numbers that haven't messaged us. */
+  waContactDays: 180,
+  /** WhatsApp message log. */
+  waMessageDays: 30,
+} as const;
+
+/** Version of the privacy notice and terms; owners accept this version at sign-up. */
+export const LEGAL_VERSION = '2026-10-05';

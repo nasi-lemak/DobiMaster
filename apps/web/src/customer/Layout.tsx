@@ -59,7 +59,13 @@ export function CustomerLayout() {
       <main className="flex-1 px-4 pb-10 pt-4">
         <Outlet />
       </main>
-      <footer className="px-4 pb-6 text-center text-xs text-muted">
+      <footer className="flex flex-wrap justify-center gap-x-4 gap-y-1 px-4 pb-6 text-center text-xs text-muted">
+        <Link to="/privacy" className="underline-offset-2 hover:underline">
+          {t('privacy')}
+        </Link>
+        <Link to="/terms" className="underline-offset-2 hover:underline">
+          {t('terms')}
+        </Link>
         <Link to="/owner" className="underline-offset-2 hover:underline">
           {t('owner')}
         </Link>
